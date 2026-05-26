@@ -38,7 +38,7 @@ ENV NODE_ENV=production
 
 # OCI image metadata (https://github.com/opencontainers/image-spec/blob/main/annotations.md)
 LABEL org.opencontainers.image.title="fbi-crime-mcp-server"
-LABEL org.opencontainers.image.description=""
+LABEL org.opencontainers.image.description="Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP."
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 
 # Copy dependency manifests
