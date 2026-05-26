@@ -1,15 +1,16 @@
 # fbi-crime-mcp-server - Directory Structure
 
-Generated on: 2026-05-26 03:18:26
+Generated on: 2026-05-26 07:39:46
 
 ```text
 fbi-crime-mcp-server/
 ├── .claude/
 ├── .github/
-│   └── ISSUE_TEMPLATE/
-│       ├── bug_report.yml
-│       ├── config.yml
-│       └── feature_request.yml
+│   ├── ISSUE_TEMPLATE/
+│   │   ├── bug_report.yml
+│   │   ├── config.yml
+│   │   └── feature_request.yml
+│   └── FUNDING.yml
 ├── .vscode/
 │   ├── extensions.json
 │   └── settings.json
