@@ -1,166 +1,91 @@
 /**
  * @fileoverview Shared types for FBI Crime Data Explorer API responses.
- * Raw upstream shapes — fields optional to preserve upstream sparsity.
+ * Reflects the actual CDE API as of 2026-05-25.
+ * UCR legacy endpoints are decommissioned — only CDE endpoints remain active.
  * @module services/fbi-api/types
  */
 
-/** Pagination envelope returned by all list endpoints. */
-export interface FbiPagination {
-  count?: number;
-  page?: number;
-  pages?: number;
-  per_page?: number;
+/**
+ * LEOKA chart data returned by /cde/leoka/ytd and /cde/leoka/monthly.
+ * Both endpoints wrap this inside:
+ *   ytd:     [{ leoka_chart_ytd:     { data: { chart_data: FbiLeokaChartData } } }]
+ *   monthly: [{ leoka_chart_monthly: { data: { chart_data: FbiLeokaChartData } } }]
+ */
+export interface FbiLeokaChartData {
+  /** Body armor worn status. { "Yes": 3, "No": 55, ... } */
+  body_armor_worn?: Record<string, number>;
+  /** Officers killed/assaulted totals for the period. */
+  incidents_victim_officer_totals_ytd?: {
+    /** Total officers killed (feloniously + accidentally). */
+    total_officers?: number;
+    /** Total incidents (one or more officers may be killed per incident). */
+    total_incidents?: number;
+    /** Officers killed due to a felonious act. */
+    total_officers_dod?: number;
+    /** Officers killed due to an accident. */
+    total_officers_doi?: number;
+    /** Incidents involving a felonious killing. */
+    total_incidents_dod?: number;
+    /** Incidents involving an accidental killing. */
+    total_incidents_doi?: number;
+  };
+  /** Lighting conditions. { "Daylight": 30, ... } */
+  lighting_conditions?: Record<string, number>;
+  /** Location of attack breakdown. { "Ambush": 5, ... } */
+  location_of_attack?: Record<string, number>;
+  /** Offender demographic breakdown. */
+  offender_demographic?: Record<string, unknown>;
+  /** Whether offender was previously known to agency. */
+  offender_previously_known_to_agency?: Record<string, number>;
+  /** Prior mental illness status of offender. */
+  offender_prior_mental_illness?: Record<string, number>;
+  /** Prior relationship of offender to officer. */
+  offender_prior_relationship?: Record<string, number>;
+  /** Officer activity at time of incident. { "Patrolling": 17, ... } */
+  officer_activity?: Record<string, number>;
+  /** Circumstances at time of attack. */
+  officer_circumstances_time_of_attack?: Record<string, number>;
+  /** Geographic region breakdown. { "South": 25, ... } */
+  officer_death_by_geographic_region?: Record<string, number>;
+  /** Officer felonious/accidental deaths by month within each year. { "Felonious": { "2022": { "Jan": 4, ... } }, ... } */
+  officer_death_by_month?: Record<string, Record<string, Record<string, number>>>;
+  /** Time of day breakdown. */
+  officer_death_by_time_of_day?: Record<string, number>;
+  /** Officer felonious/accidental deaths by calendar year. { "Felonious": { "2022": 61, ... }, "Accidental": { "2022": 57, ... } } */
+  officer_death_by_year?: Record<string, Record<string, number>>;
+  /** Officer demographic breakdown. */
+  officer_demographic?: Record<string, unknown>;
+  /** Officer incident type breakdown. { "Fall": 2, ... } */
+  officer_incident_type?: Record<string, number>;
+  /** Officer type of assignment. */
+  officer_type_of_assignment?: Record<string, number>;
+  /** Weapon counts for the period. { "Handguns": 34, "Rifles": 10, ... } */
+  weapons?: Record<string, number>;
+  /** Weather conditions. { "Clear": 40, ... } */
+  weather_conditions?: Record<string, number>;
 }
 
-/** Agency search / list response. */
-export interface FbiAgency {
-  agency_name?: string;
-  agency_type_name?: string;
-  city_name?: string;
-  county_name?: string;
-  female_civilian?: number | null;
-  female_officer?: number | null;
-  male_civilian?: number | null;
-  // Staffing (from detailed profile)
-  male_officer?: number | null;
-  nibrs?: boolean;
-  nibrs_start_date?: string | null;
-  ori?: string;
-  population?: number | null;
-  population_group_code?: string;
-  population_group_desc?: string;
-  state_abbr?: string;
-  state_name?: string;
-  total_civilian?: number | null;
-  total_officers?: number | null;
-}
-
-/** UCR national/state crime estimate row. */
-export interface FbiEstimateRow {
-  aggravated_assault?: number | null;
-  burglary?: number | null;
-  homicide?: number | null;
-  larceny?: number | null;
-  motor_vehicle_theft?: number | null;
-  population?: number | null;
-  property_crime?: number | null;
-  rape_legacy?: number | null;
-  rape_revised?: number | null;
-  robbery?: number | null;
-  state_abbr?: string;
-  state_name?: string;
-  violent_crime?: number | null;
-  year?: number;
-}
-
-/** Agency offense count row. */
-export interface FbiAgencyOffenseRow {
-  actual?: number | null;
-  agency_name?: string;
-  cleared?: number | null;
-  offense?: string;
-  ori?: string;
-  reported?: number | null;
-  state_abbr?: string;
-  year?: number;
-}
-
-/** NIBRS breakdown row (offenders, victims, offenses). */
-export interface FbiNibrsRow {
-  key?: string;
-  total?: number | null;
-  value?: number | null;
-}
-
-/** Arrest row. */
-export interface FbiArrestRow {
-  asian?: number | null;
-  black?: number | null;
-  female_adult?: number | null;
-  female_juv?: number | null;
-  male_adult?: number | null;
-  male_juv?: number | null;
-  native_american?: number | null;
-  offense?: string;
-  pacific_islander?: number | null;
-  total?: number | null;
-  white?: number | null;
-  year?: number;
-}
-
-/** Hate crime bias row. */
-export interface FbiHateCrimeRow {
-  bias_motivation?: string;
-  data_year?: number;
-  // When cross_offense=true, additional offense breakdown may appear
-  offense_name?: string;
-  total_individual_incidents?: number | null;
-  total_known_offenders?: number | null;
-  total_offenses?: number | null;
-  total_victims?: number | null;
-}
-
-/** Participation row. */
-export interface FbiParticipationRow {
-  agency_count?: number | null;
-  agency_name?: string;
-  covered_population?: number | null;
-  months_reported?: number | null;
-  nibrs?: boolean;
-  nibrs_participating?: number | null;
-  nibrs_population?: number | null;
-  nibrs_start_date?: string | null;
-  // Agency-level variant
-  ori?: string;
-  state_abbr?: string;
-  state_name?: string;
-  total_population?: number | null;
-  year?: number;
-}
-
-/** Human trafficking row. */
-export interface FbiHumanTraffickingRow {
-  actual_commercial_sex_acts?: number | null;
-  actual_involuntary_servitude?: number | null;
-  agency_name?: string;
-  cleared_commercial_sex_acts?: number | null;
-  cleared_involuntary_servitude?: number | null;
-  data_year?: number;
-  ori?: string;
-  state_abbr?: string;
-}
-
-/** LEOKA row. */
-export interface FbiLeokaRow {
-  firearm?: number | null;
-  hands?: number | null;
-  knife?: number | null;
-  month?: number | null;
-  other?: number | null;
-  total_accident?: number | null;
-  total_assaults?: number | null;
-  total_felony?: number | null;
-  year?: number;
-}
-
-/** Arson row. */
-export interface FbiArsonRow {
-  inhabited_structures?: number | null;
-  motor_vehicles?: number | null;
-  other?: number | null;
-  other_structures?: number | null;
-  state_abbr?: string;
-  total_actual?: number | null;
-  total_cleared?: number | null;
-  uninhabited_structures?: number | null;
-  year?: number;
-}
-
-/** Reference code table row. */
-export interface FbiCodeTableRow {
-  code?: string;
-  description?: string;
-  key?: string;
-  name?: string;
-  value?: string;
+/**
+ * Summarized offense response from /cde/summarized/{scope}/{offense}.
+ * Returns monthly rates and actuals for the requested date range.
+ * Keys in rates/actuals use the format "MM-YYYY" (e.g. "01-2022").
+ */
+export interface FbiSummarizedResponse {
+  /** API metadata: max_data_date, last_refresh_date. */
+  cde_properties?: {
+    max_data_date?: Record<string, string>;
+    last_refresh_date?: Record<string, string>;
+  };
+  offenses: {
+    /** Per-100k rates by location and month. Keys: "United States Offenses", "California Offenses", "Agency Name Offenses", clearance equivalents. */
+    rates: Record<string, Record<string, number>>;
+    /** Absolute offense/clearance counts by location and month. Same key structure as rates. */
+    actuals: Record<string, Record<string, number>>;
+  };
+  /** Population data by location and month. */
+  populations?: {
+    population?: Record<string, Record<string, number>>;
+  };
+  /** Tooltip metadata (internal CDE display use). */
+  tooltips?: Record<string, unknown>;
 }

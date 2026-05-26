@@ -1,56 +1,25 @@
 /**
- * @fileoverview FBI state crime overview resource.
- * Returns current-year participation rates and UCR/NIBRS adoption for a state.
+ * @fileoverview FBI state overview resource — currently unavailable.
+ * The CDE participation backend (/LATEST/participation/state/) has been decommissioned.
  * @module mcp-server/resources/definitions/state.resource
  */
 
 import { resource, z } from '@cyanheads/mcp-ts-core';
-import { notFound } from '@cyanheads/mcp-ts-core/errors';
-import { getFbiApiService } from '@/services/fbi-api/fbi-api-service.js';
+import { serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
 
 export const stateResource = resource('fbi://state/{state_abbr}', {
   name: 'fbi-state-overview',
   description:
-    'State crime overview — current-year participation rates, UCR vs. NIBRS adoption, total reporting agencies, and population covered. Provides fast "is this state\'s data trustworthy?" context for downstream tools.',
+    '[UNAVAILABLE] The FBI state participation endpoint has been decommissioned. The CDE /LATEST/participation/state/ path returns 404. Attempting to read this resource will return a ServiceUnavailable error.',
   mimeType: 'application/json',
   params: z.object({
     state_abbr: z.string().describe('Two-letter US state abbreviation (e.g. CA, TX, NY).'),
   }),
-  output: z.object({
-    state_abbr: z.string().optional().describe('State abbreviation.'),
-    state_name: z.string().optional().describe('Full state name.'),
-    year: z.number().optional().describe('Most recent data year available.'),
-    agency_count: z.number().nullable().optional().describe('Total agencies in this state.'),
-    months_reported: z
-      .number()
-      .nullable()
-      .optional()
-      .describe('Average months reported across agencies.'),
-    nibrs_participating: z
-      .number()
-      .nullable()
-      .optional()
-      .describe('Number of NIBRS-reporting agencies.'),
-    total_population: z.number().nullable().optional().describe('Total state population.'),
-    covered_population: z
-      .number()
-      .nullable()
-      .optional()
-      .describe('Population covered by reporting agencies.'),
-  }),
+  output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(params, ctx) {
-    const svc = getFbiApiService();
-    ctx.log.debug('fbi://state resource', { state_abbr: params.state_abbr });
-    const rows = await svc.getCdeParticipationState(params.state_abbr, {}, ctx);
-
-    if (rows.length === 0) {
-      throw notFound(
-        `No participation data found for state "${params.state_abbr}". Check the state abbreviation spelling.`,
-      );
-    }
-
-    const [row] = rows;
-    return row ?? {};
+  async handler(params, _ctx) {
+    throw serviceUnavailable(
+      `The FBI state participation endpoint has been decommissioned. Cannot retrieve overview for state "${params.state_abbr}". The CDE /LATEST/participation/ paths return 404.`,
+    );
   },
 });

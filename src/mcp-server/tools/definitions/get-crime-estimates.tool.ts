@@ -1,6 +1,7 @@
 /**
- * @fileoverview FBI UCR national/state crime estimates tool.
- * Returns FBI-adjusted estimated crime counts by year for violent and property crime.
+ * @fileoverview FBI CDE summarized offense data tool.
+ * Returns monthly offense rates and counts from the /cde/summarized/ endpoint.
+ * Replaces the decommissioned UCR /estimates/ endpoint.
  * @module mcp-server/tools/definitions/get-crime-estimates.tool
  */
 
@@ -8,185 +9,255 @@ import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { getFbiApiService } from '@/services/fbi-api/fbi-api-service.js';
 
+/** Valid offense slugs accepted by the /summarized/ endpoint. */
+const OFFENSE_VALUES = [
+  'violent-crime',
+  'property-crime',
+  'robbery',
+  'burglary',
+  'larceny',
+  'motor-vehicle-theft',
+  'arson',
+  'aggravated-assault',
+  'rape',
+  'homicide',
+] as const;
+
+/** Format a year+month into the MM-YYYY string the CDE API expects. */
+function toApiDate(year: number, month: number): string {
+  return `${String(month).padStart(2, '0')}-${year}`;
+}
+
+/** Parse a MM-YYYY key into { year, month } numbers. */
+function parseApiDate(key: string): { year: number; month: number } {
+  const parts = key.split('-');
+  return { month: parseInt(parts[0] ?? '1', 10), year: parseInt(parts[1] ?? '2000', 10) };
+}
+
 export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
   title: 'FBI Get Crime Estimates',
   description:
-    '**UCR Summary.** National or state-level estimated crime counts by year, adjusted by the FBI to account for non-reporting agencies. Covers violent crime (murder, rape, robbery, aggravated assault) and property crime (burglary, larceny, motor vehicle theft). Use for top-level trend comparisons across states or years — these are the headline figures the FBI publishes annually. Important: rape is returned as both rape_legacy and rape_revised due to a 2013 definition change; do not sum them. These are FBI estimates, not raw reported counts — see fbi_get_agency_offenses for raw agency data.',
+    'Monthly offense rates (per 100k population) and raw counts for national, state, or agency scope. Data comes from the FBI Crime Data Explorer summarized endpoint. Returns month-by-month data for the requested offense and date range. Use scope "national" or "state" for aggregate trends; scope "agency" for a single law enforcement agency by ORI code. Offense options: violent-crime, property-crime, robbery, burglary, larceny, motor-vehicle-theft, arson, aggravated-assault, rape, homicide.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [
     {
-      reason: 'state_required',
+      reason: 'scope_param_missing',
       code: JsonRpcErrorCode.InvalidParams,
-      when: 'scope is "state" but state_abbr was not provided.',
-      recovery: 'Provide a two-letter state abbreviation when requesting state-level estimates.',
+      when: 'scope is "state" but state_abbr is missing, or scope is "agency" but ori is missing.',
+      recovery:
+        'Provide state_abbr for state scope, or ori (9-character ORI code) for agency scope.',
     },
     {
       reason: 'no_data',
       code: JsonRpcErrorCode.NotFound,
-      when: 'No estimate data was returned for the requested scope and year range.',
-      recovery: 'Broaden the year range or check the state abbreviation spelling and try again.',
+      when: 'No data was returned for the requested offense and date range.',
+      recovery:
+        'Broaden the date range or try a different offense type. Data availability varies by year and scope.',
     },
   ],
 
   input: z.object({
     scope: z
-      .enum(['national', 'state'])
-      .describe('Geographic scope: national for US-wide estimates, state for a single state.'),
+      .enum(['national', 'state', 'agency'])
+      .describe(
+        'Geographic scope: national, state (requires state_abbr), or agency (requires ori).',
+      ),
+    offense: z
+      .enum(OFFENSE_VALUES)
+      .describe(
+        'Offense type: violent-crime, property-crime, robbery, burglary, larceny, motor-vehicle-theft, arson, aggravated-assault, rape, or homicide.',
+      ),
     state_abbr: z
       .string()
       .length(2)
       .optional()
-      .describe('Two-letter state abbreviation (e.g. CA, TX). Required when scope is "state".'),
-    since_year: z
+      .describe('Two-letter state abbreviation (e.g. CA). Required when scope is "state".'),
+    ori: z
+      .string()
+      .length(9)
+      .optional()
+      .describe('9-character ORI agency code. Required when scope is "agency".'),
+    from_year: z
       .number()
       .int()
-      .min(1960)
+      .min(2000)
       .max(2030)
-      .optional()
-      .describe('Starting year for the data range (inclusive). Defaults to earliest available.'),
-    until_year: z
+      .describe('Start year of the data range (inclusive). The API uses monthly granularity.'),
+    from_month: z
       .number()
       .int()
-      .min(1960)
+      .min(1)
+      .max(12)
+      .default(1)
+      .describe('Start month (1–12). Defaults to January.'),
+    to_year: z
+      .number()
+      .int()
+      .min(2000)
       .max(2030)
-      .optional()
-      .describe('Ending year for the data range (inclusive). Defaults to most recent available.'),
+      .describe('End year of the data range (inclusive).'),
+    to_month: z
+      .number()
+      .int()
+      .min(1)
+      .max(12)
+      .default(12)
+      .describe('End month (1–12). Defaults to December.'),
   }),
 
   output: z.object({
-    scope: z.string().describe('Geographic scope of the data.'),
+    scope: z.string().describe('Geographic scope.'),
+    offense: z.string().describe('Offense type queried.'),
     state_abbr: z.string().optional().describe('State abbreviation when scope is "state".'),
-    estimates: z
+    ori: z.string().optional().describe('ORI code when scope is "agency".'),
+    from: z.string().describe('Start of data range (MM-YYYY).'),
+    to: z.string().describe('End of data range (MM-YYYY).'),
+    months: z
       .array(
         z
           .object({
-            year: z.number().optional().describe('Data year.'),
-            population: z
+            year: z.number().describe('Year.'),
+            month: z.number().describe('Month (1–12).'),
+            rate_per_100k: z
               .number()
               .nullable()
               .optional()
-              .describe('Population estimate for this scope and year.'),
-            violent_crime: z
+              .describe('Offense rate per 100,000 population.'),
+            clearance_rate_per_100k: z
               .number()
               .nullable()
               .optional()
-              .describe(
-                'Estimated total violent crimes (murder + rape + robbery + aggravated assault).',
-              ),
-            homicide: z
-              .number()
-              .nullable()
-              .optional()
-              .describe('Estimated murders and non-negligent manslaughters.'),
-            rape_legacy: z
-              .number()
-              .nullable()
-              .optional()
-              .describe(
-                'Estimated rapes using the pre-2013 legacy definition. Use one rape series consistently for trend analysis.',
-              ),
-            rape_revised: z
-              .number()
-              .nullable()
-              .optional()
-              .describe(
-                'Estimated rapes using the post-2013 revised definition. Use one rape series consistently for trend analysis.',
-              ),
-            robbery: z.number().nullable().optional().describe('Estimated robberies.'),
-            aggravated_assault: z
-              .number()
-              .nullable()
-              .optional()
-              .describe('Estimated aggravated assaults.'),
-            property_crime: z
-              .number()
-              .nullable()
-              .optional()
-              .describe(
-                'Estimated total property crimes (burglary + larceny + motor vehicle theft).',
-              ),
-            burglary: z.number().nullable().optional().describe('Estimated burglaries.'),
-            larceny: z.number().nullable().optional().describe('Estimated larceny-thefts.'),
-            motor_vehicle_theft: z
-              .number()
-              .nullable()
-              .optional()
-              .describe('Estimated motor vehicle thefts.'),
+              .describe('Clearance rate per 100,000 population.'),
+            actual_count: z.number().nullable().optional().describe('Raw offense count.'),
+            clearance_count: z.number().nullable().optional().describe('Raw clearance count.'),
           })
-          .describe('A single annual crime estimate row.'),
+          .describe('One month of offense data.'),
       )
-      .describe('Annual crime estimate rows for the requested scope.'),
-    totalYears: z.number().describe('Number of years returned.'),
-    note: z
-      .string()
-      .optional()
-      .describe('Methodological note about the data, such as the 2013 rape definition change.'),
+      .describe('Monthly data rows sorted chronologically.'),
+    total_months: z.number().describe('Number of months returned.'),
+    data_last_updated: z.string().optional().describe('Date the CDE last refreshed this data.'),
   }),
 
   async handler(input, ctx) {
-    ctx.log.info('fbi_get_crime_estimates', { scope: input.scope, state_abbr: input.state_abbr });
-    const svc = getFbiApiService();
+    ctx.log.info('fbi_get_crime_estimates', {
+      scope: input.scope,
+      offense: input.offense,
+      state_abbr: input.state_abbr,
+      ori: input.ori,
+    });
 
     if (input.scope === 'state' && !input.state_abbr) {
-      throw ctx.fail('state_required', 'state_abbr is required when scope is "state".', {
-        ...ctx.recoveryFor('state_required'),
+      throw ctx.fail('scope_param_missing', 'state_abbr is required when scope is "state".', {
+        ...ctx.recoveryFor('scope_param_missing'),
+      });
+    }
+    if (input.scope === 'agency' && !input.ori) {
+      throw ctx.fail('scope_param_missing', 'ori is required when scope is "agency".', {
+        ...ctx.recoveryFor('scope_param_missing'),
       });
     }
 
-    const yearParams = {
-      ...(input.since_year !== undefined && { since: input.since_year }),
-      ...(input.until_year !== undefined && { until: input.until_year }),
-    };
-    const rows =
-      input.scope === 'national'
-        ? await svc.getEstimatesNational(yearParams, ctx)
-        : // state_abbr is validated above
-          await svc.getEstimatesState(input.state_abbr as string, yearParams, ctx);
+    const from = toApiDate(input.from_year, input.from_month);
+    const to = toApiDate(input.to_year, input.to_month);
+    const svc = getFbiApiService();
+    // state_abbr and ori are validated above against their scope requirements
+    const stateAbbr = input.state_abbr as string;
+    const ori = input.ori as string;
 
-    if (rows.length === 0) {
+    const data =
+      input.scope === 'national'
+        ? await svc.getSummarizedNational(input.offense, { from, to }, ctx)
+        : input.scope === 'state'
+          ? await svc.getSummarizedState(stateAbbr, input.offense, { from, to }, ctx)
+          : await svc.getSummarizedAgency(ori, input.offense, { from, to }, ctx);
+
+    // Find the primary offense/clearance keys in the response.
+    // National: "United States Offenses" / "United States Clearances"
+    // State: "{State} Offenses" / "{State} Clearances"
+    // Agency: "{Agency} Offenses" / "{Agency} Clearances"
+    const offenseRates = data.offenses.rates;
+    const offenseActuals = data.offenses.actuals;
+
+    const offenseKey = Object.keys(offenseRates).find((k) => k.endsWith('Offenses')) ?? '';
+    const clearanceKey = Object.keys(offenseRates).find((k) => k.endsWith('Clearances')) ?? '';
+    const actualOffenseKey = Object.keys(offenseActuals).find((k) => k.endsWith('Offenses')) ?? '';
+    const actualClearanceKey =
+      Object.keys(offenseActuals).find((k) => k.endsWith('Clearances')) ?? '';
+
+    const rateData = offenseRates[offenseKey] ?? {};
+    const clearanceRateData = offenseRates[clearanceKey] ?? {};
+    const actualData = offenseActuals[actualOffenseKey] ?? {};
+    const clearanceActualData = offenseActuals[actualClearanceKey] ?? {};
+
+    // Collect all month keys and build sorted rows
+    const allKeys = new Set([...Object.keys(rateData), ...Object.keys(actualData)]);
+
+    if (allKeys.size === 0) {
       throw ctx.fail(
         'no_data',
-        `No crime estimate data found for scope="${input.scope}"${input.state_abbr ? `, state=${input.state_abbr}` : ''}.`,
-        {
-          ...ctx.recoveryFor('no_data'),
-        },
+        `No data returned for offense="${input.offense}" scope="${input.scope}" from=${from} to=${to}.`,
+        { ...ctx.recoveryFor('no_data') },
       );
     }
 
-    ctx.log.info('fbi_get_crime_estimates completed', { years: rows.length });
-    const hasRapeBoth = rows.some(
-      (r) => r.rape_legacy !== undefined && r.rape_revised !== undefined,
-    );
+    const months = Array.from(allKeys)
+      .map((key) => {
+        const { year, month } = parseApiDate(key);
+        return {
+          year,
+          month,
+          _key: key,
+          rate_per_100k: rateData[key] ?? null,
+          clearance_rate_per_100k: clearanceRateData[key] ?? null,
+          actual_count: actualData[key] ?? null,
+          clearance_count: clearanceActualData[key] ?? null,
+        };
+      })
+      .sort((a, b) => (a.year !== b.year ? a.year - b.year : a.month - b.month))
+      .map(({ _key: _k, ...rest }) => rest);
+
+    ctx.log.info('fbi_get_crime_estimates completed', { months: months.length });
+
+    const lastUpdated = data.cde_properties?.last_refresh_date?.UCR;
+
     return {
       scope: input.scope,
+      offense: input.offense,
       ...(input.state_abbr && { state_abbr: input.state_abbr }),
-      estimates: rows,
-      totalYears: rows.length,
-      ...(hasRapeBoth && {
-        note: 'rape_legacy uses the pre-2013 definition; rape_revised uses the 2013+ definition. Do not sum the two series or compare across the 2013 break without noting the methodology change.',
-      }),
+      ...(input.ori && { ori: input.ori }),
+      from,
+      to,
+      months,
+      total_months: months.length,
+      ...(lastUpdated && { data_last_updated: lastUpdated }),
     };
   },
 
   format: (result) => {
-    const fmt = (v: number | null | undefined) => (v != null ? v.toLocaleString() : '—');
+    const fmt = (v: number | null | undefined) =>
+      v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
+    const scopeLabel =
+      result.scope === 'national'
+        ? 'National'
+        : result.scope === 'state'
+          ? (result.state_abbr ?? result.scope)
+          : `ORI: ${result.ori ?? result.scope}`;
     const lines: string[] = [
-      `## FBI UCR Crime Estimates — ${result.scope === 'state' ? (result.state_abbr ?? result.scope) : 'National'}`,
-      `**Scope:** ${result.scope}${result.state_abbr ? ` | **State:** ${result.state_abbr}` : ''}`,
-      `**Years returned:** ${result.totalYears}`,
+      `## FBI Crime Data — ${result.offense} (${scopeLabel})`,
+      `**Scope:** ${result.scope}${result.state_abbr ? ` | **State:** ${result.state_abbr}` : ''}${result.ori ? ` | **ORI:** ${result.ori}` : ''}`,
+      `**Offense:** ${result.offense} | **Range:** ${result.from} → ${result.to}`,
+      `**Months returned:** ${result.total_months}`,
     ];
-    if (result.note) lines.push(`\n> **Note:** ${result.note}`);
-    lines.push('');
+    if (result.data_last_updated) lines.push(`**Data last updated:** ${result.data_last_updated}`);
     lines.push(
-      '| Year | Population | Violent Crime | Homicide | Rape (Legacy) | Rape (Revised) | Robbery | Agg. Assault | Property Crime | Burglary | Larceny | MV Theft |',
+      '',
+      '| Year | Month | Rate/100k | Clearance Rate | Actual Count | Clearances |',
+      '|:-----|:-----:|----------:|---------------:|-------------:|-----------:|',
     );
-    lines.push(
-      '|:-----|:-----------|:-------------|:---------|:-------------|:---------------|:--------|:-------------|:---------------|:---------|:--------|:---------|',
-    );
-    for (const r of result.estimates) {
+    for (const m of result.months) {
       lines.push(
-        `| ${r.year ?? '—'} | ${fmt(r.population)} | ${fmt(r.violent_crime)} | ${fmt(r.homicide)} | ${fmt(r.rape_legacy)} | ${fmt(r.rape_revised)} | ${fmt(r.robbery)} | ${fmt(r.aggravated_assault)} | ${fmt(r.property_crime)} | ${fmt(r.burglary)} | ${fmt(r.larceny)} | ${fmt(r.motor_vehicle_theft)} |`,
+        `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${m.actual_count != null ? m.actual_count.toLocaleString() : '—'} | ${m.clearance_count != null ? m.clearance_count.toLocaleString() : '—'} |`,
       );
     }
     return [{ type: 'text', text: lines.join('\n') }];
