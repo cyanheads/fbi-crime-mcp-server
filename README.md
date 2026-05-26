@@ -1,13 +1,13 @@
 <div align="center">
   <h1>@cyanheads/fbi-crime-mcp-server</h1>
-  <p><b>Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP. STDIO or Streamable HTTP.</b>
-  <div>12 Tools • 2 Resources</div>
+  <p><b>Exposes the FBI Crime Data Explorer API — crime estimates, agency offense rates, and LEOKA officer safety data via MCP. STDIO or Streamable HTTP.</b>
+  <div>12 Tools (4 active via CDE API, 8 decommissioned) • 2 Resources</div>
   </p>
 </div>
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-0.1.0-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![TypeScript](https://img.shields.io/badge/TypeScript-^6.0.3-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.3.2-blueviolet.svg?style=flat-square)](https://bun.sh/)
+[![Version](https://img.shields.io/badge/Version-0.1.1-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![TypeScript](https://img.shields.io/badge/TypeScript-^6.0.3-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.3.2-blueviolet.svg?style=flat-square)](https://bun.sh/)
 
 </div>
 
@@ -21,124 +21,70 @@
 
 ## Tools
 
-12 tools for working with FBI Crime Data Explorer data, organized across two data layers (UCR Summary and NIBRS) plus specialty reporting tracks:
+12 tools defined. **4 are active** via the FBI CDE API; **8 are decommissioned** — the legacy UCR backend (`crime-data-api.fr.cloud.gov`) was shut down, and those tools return a `ServiceUnavailable` error on every call with guidance to the FBI CDE website.
+
+### Active tools (CDE API)
 
 | Tool | Description |
 |:-----|:------------|
-| `fbi_search_agencies` | Search law enforcement agencies by state, city, type, or population group. Returns ORI codes — the identifier required for all agency-scoped queries. |
-| `fbi_get_agency` | Full profile for a single agency by ORI: location, jurisdiction type, population served, NIBRS adoption year, staffing headcount, and UCR participation history. |
-| `fbi_get_crime_estimates` | **UCR Summary.** National or state-level estimated crime counts by year, adjusted by the FBI to account for non-reporting agencies. Covers violent and property crime. |
-| `fbi_get_agency_offenses` | **UCR Summary.** Offense counts reported by a specific agency (by ORI) or all agencies within a state or county, broken down by offense type and year. |
-| `fbi_get_nibrs_breakdown` | **NIBRS only.** Count incident-level NIBRS records broken down by a demographic or attribute variable — nationally or for a specific state. |
-| `fbi_get_arrests` | **UCR Summary. National only.** Annual arrest counts by offense type, disaggregated by age group, sex, and race. |
-| `fbi_get_hate_crimes` | Hate crime incident counts broken down by bias motivation at national or state level, with optional cross-tab by offense type. |
-| `fbi_get_participation` | UCR and NIBRS reporting participation rates — agency count, months reported, NIBRS vs. SRS adoption, and share of population covered. |
-| `fbi_get_human_trafficking` | Human trafficking offense and clearance counts (commercial sex acts, involuntary servitude) at national, state, or agency level. |
+| `fbi_get_crime_estimates` | Monthly offense rates (per 100k) and raw counts from the FBI CDE summarized endpoint. National, state, or agency scope. Covers violent-crime, property-crime, robbery, burglary, larceny, motor-vehicle-theft, arson, aggravated-assault, rape, homicide. |
+| `fbi_get_agency_offenses` | Same CDE summarized endpoint, scoped to a single agency by ORI code. Returns month-by-month rates and counts for that agency. |
 | `fbi_get_leoka` | Law Enforcement Officers Killed and Assaulted (LEOKA) — fatality and assault counts with circumstance and weapon detail, by month or year-to-date. |
-| `fbi_get_arson` | Arson offense counts at national or state level by year, tracked under a separate UCR reporting track. |
-| `fbi_list_code_table` | Look up valid values for enum-like parameters used across other tools: offense names, bias codes, location types, weapon types, population groups, and more. |
+| `fbi_get_arson` | Redirects to `fbi_get_crime_estimates` with `offense="arson"` — arson data is available via the CDE summarized endpoint. |
 
-### `fbi_search_agencies`
+### Decommissioned tools (always return error)
 
-Search for law enforcement agencies and retrieve their ORI codes.
+| Tool | Status |
+|:-----|:-------|
+| `fbi_search_agencies` | UCR agency search backend decommissioned |
+| `fbi_get_agency` | UCR agency lookup backend decommissioned |
+| `fbi_get_arrests` | UCR arrests backend decommissioned |
+| `fbi_get_hate_crimes` | UCR hate crimes backend decommissioned |
+| `fbi_get_participation` | UCR participation backend decommissioned |
+| `fbi_get_human_trafficking` | UCR human trafficking backend decommissioned |
+| `fbi_get_nibrs_breakdown` | NIBRS backend decommissioned |
+| `fbi_list_code_table` | UCR code table backend decommissioned |
 
-- Filter by state abbreviation, city name, agency type (City, County, Federal, State Police, University or College, Tribal, Other), or population group
-- ORI codes are required as inputs for `fbi_get_agency`, `fbi_get_agency_offenses`, and `fbi_get_participation`
-- Paginated results for large state inventories
-
----
-
-### `fbi_get_agency`
-
-Full agency profile by 9-character ORI code.
-
-- Jurisdiction type, location, population served
-- NIBRS adoption year and UCR participation history
-- Staffing headcount
-- Use to confirm an agency's data coverage before querying offense counts
-
----
+For decommissioned data, consult [cde.ucr.cjis.gov](https://cde.ucr.cjis.gov/) or download FBI bulk CSV files.
 
 ### `fbi_get_crime_estimates`
 
-FBI-adjusted national or state-level crime estimates.
+Monthly offense rates and raw counts from the FBI CDE summarized endpoint.
 
-- Covers violent crime (murder, rape, robbery, aggravated assault) and property crime (burglary, larceny, motor vehicle theft)
-- FBI-estimated figures fill in for non-reporting agencies — not raw reported counts
-- Rape is returned as both `rape_legacy` and `rape_revised` due to a 2013 definition change; long-term trend analysis should use one series consistently
-- Use for top-level trend comparisons across states or years
+- Scope: `national`, `state` (requires `state_abbr`), or `agency` (requires ORI)
+- Offense types: `violent-crime`, `property-crime`, `robbery`, `burglary`, `larceny`, `motor-vehicle-theft`, `arson`, `aggravated-assault`, `rape`, `homicide`
+- Returns per-100k rates and raw actuals by month for the requested date range
 
 ---
 
 ### `fbi_get_agency_offenses`
 
-Raw offense counts from a specific agency or all agencies in a state or county.
+Same CDE summarized endpoint scoped to a single agency, state, or national level.
 
-- Provide `ori` for a single-agency view; provide `state_abbr` (+ optional `county_fips`) for a multi-agency view
-- Returns reported counts — not FBI-adjusted estimates; figures differ from `fbi_get_crime_estimates`
-- FIPS codes for `county_fips` are available via the Census MCP server
-- Year range filtering via `since_year` / `until_year`
-
----
-
-### `fbi_get_nibrs_breakdown`
-
-Demographic and attribute breakdowns of NIBRS incident records.
-
-- `dimension` selects what is being counted: `offenders`, `victims`, or `offenses`
-- `variable` selects the grouping: race, sex, age, location type, weapon, offense name, offender–victim relationship, and more (see design for full variable table per dimension)
-- Optional `offense_name` filter narrows to a specific crime category
-- National or state scope; coverage limited to NIBRS-reporting agencies
-- Chain with `fbi_get_participation` to understand geographic gaps before drawing conclusions
-
----
-
-### `fbi_get_hate_crimes`
-
-Hate crime counts by bias motivation.
-
-- Bias categories: race/ethnicity, religion, sexual orientation, disability, gender
-- National or state scope
-- `cross_offense=true` additionally shows which offense types bias incidents involve
-- Voluntary-report program — participation varies sharply by jurisdiction; always pair with `fbi_get_participation`
-
----
-
-### `fbi_get_participation`
-
-Reporting participation rates for UCR and NIBRS.
-
-- Returns agency count, months of data reported, NIBRS vs. SRS adoption rates, and share of population covered
-- Scope: `national`, `state`, or `agency` (all agencies in a state, optionally filtered to NIBRS-only with `nibrs_only=true`)
-- Always call alongside any crime count tool — a count from an agency that reported 3 of 12 months is not comparable to a full-year reporter
-
----
-
-### `fbi_list_code_table`
-
-Look up valid enum values for other tools.
-
-- Valid tables: `offenses`, `bias_motivation`, `location_type`, `weapon_type`, `population_group`, `victim_type`, `prop_desc`, `resident_status`, `relationship`, `circumstance`
-- Call this before queries that need specific codes or category names to avoid invalid-input errors
+- Functionally equivalent to `fbi_get_crime_estimates` with `scope="agency"` — useful when the agent's mental model is "offenses for this agency" rather than "crime trends"
+- Provide ORI for agency scope; `state_abbr` for state scope
 
 ---
 
 ### `fbi_get_leoka`
 
-Law Enforcement Officers Killed and Assaulted data.
+Law Enforcement Officers Killed and Assaulted (LEOKA) data.
 
 - Two period modes: `monthly` (by month) or `ytd` (year-to-date)
-- Includes feloniously killed, accidentally killed, and assault counts with circumstance and weapon detail
-- Use for officer safety trend analysis or as denominator context alongside staffing data from `fbi_get_agency`
+- Returns feloniously killed, accidentally killed, and assault counts with circumstance and weapon detail
+
+---
+
+### `fbi_get_arson`
+
+Redirects to `fbi_get_crime_estimates` with `offense="arson"`. The dedicated UCR arson endpoint is decommissioned; arson data remains available via the CDE summarized endpoint.
 
 ## Resources
 
 | Type | Name | Description |
 |:-----|:-----|:------------|
-| Resource | `fbi://agency/{ori}` | Full agency profile for a given ORI — jurisdiction, type, population, NIBRS adoption year, staffing, reporting history. |
-| Resource | `fbi://state/{state_abbr}` | State crime overview — participation rates, UCR vs. NIBRS adoption, total reporting agencies, and population covered. |
-
-All resource data is also reachable via tools. Use `fbi_get_agency` or `fbi_get_participation` for programmatic access in tool-only MCP clients.
+| Resource | `fbi://agency/{ori}` | Agency profile from the CDE summarized endpoint — offense rates and counts for the agency's ORI. |
+| Resource | `fbi://state/{state_abbr}` | State crime overview — offense rates and counts from the CDE summarized endpoint. |
 
 ## Features
 
@@ -153,18 +99,9 @@ Built on [`@cyanheads/mcp-ts-core`](https://www.npmjs.com/package/@cyanheads/mcp
 
 FBI Crime Data Explorer-specific:
 
-- Complete FBI CDE/UCR API integration across both base URLs (`/ucr` legacy and `/cde` LATEST endpoints)
-- UCR Summary vs. NIBRS data layer labeled explicitly in every tool description — agents route to the right data source without reading parameter docs
-- `fbi_get_participation` as a dedicated reliability context tool — paired with count tools so agents surface coverage caveats rather than treating all counts as equivalent
+- **CDE API** (`/cde/summarized/`, `/cde/leoka/`) — the surviving FBI endpoints post-UCR decommission
+- Decommissioned tools return a `ServiceUnavailable` error with a recovery hint pointing to [cde.ucr.cjis.gov](https://cde.ucr.cjis.gov/) — agents can report the gap rather than silently failing
 - DEMO_KEY mode for no-config exploration; registered api.data.gov key for production throughput
-- Arson separated from property crime totals, rape legacy/revised split documented — methodology breaks are surfaced, not silently merged
-
-Agent-friendly output:
-
-- Data layer transparency — every tool description opens with a bracketed label (`UCR Summary`, `NIBRS only`, specialty track) so routing decisions are made without parameter inspection
-- Participation-aware design — `months_reported` and `participating_population_pct` surfaced in relevant responses; `fbi_get_participation` is always the reliability companion
-- Structured unavailable reasons and per-scope dispatch — agents can branch on typed scope values (`national`, `state`, `agency`) and receive consistent output shapes rather than parsing text
-- Cross-tool workflow patterns — ORI as the shared key across agency, offense, and participation tools; FIPS codes from the Census MCP server for county filtering
 
 ## Getting started
 
@@ -326,7 +263,7 @@ The Dockerfile defaults to HTTP transport, stateless session mode, and logs to `
 |:----------|:--------|
 | `src/index.ts` | `createApp()` entry point — registers tools, resources, and inits services. |
 | `src/config` | Server-specific environment variable parsing and validation with Zod. |
-| `src/mcp-server/tools` | Tool definitions (`*.tool.ts`). 12 tools across UCR, NIBRS, and specialty tracks. |
+| `src/mcp-server/tools` | Tool definitions (`*.tool.ts`). 12 tools — 4 active via CDE API, 8 decommissioned. |
 | `src/mcp-server/resources` | Resource definitions (`*.resource.ts`). Agency and state overview resources. |
 | `src/services` | FBI API service layer — UCR and CDE clients with shared retry/timeout logic. |
 | `tests/` | Unit and integration tests mirroring `src/`. |
@@ -338,8 +275,8 @@ See [`CLAUDE.md`](./CLAUDE.md) for development guidelines and architectural rule
 - Handlers throw, framework catches — no `try/catch` in tool logic
 - Use `ctx.log` for request-scoped logging, `ctx.state` for tenant-scoped storage
 - Register new tools and resources via the barrels in `src/mcp-server/*/definitions/index.ts`
+- Active tools call the CDE API (`/cde/summarized/`, `/cde/leoka/`); decommissioned tools throw `serviceUnavailable` with a recovery hint
 - Wrap FBI API calls: validate raw → normalize to domain type → return output schema; never fabricate missing fields
-- Data layer labeling: include `UCR Summary`, `NIBRS only`, or specialty track context in every tool description so agents route correctly
 
 ## Contributing
 

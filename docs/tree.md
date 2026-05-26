@@ -1,6 +1,6 @@
 # fbi-crime-mcp-server - Directory Structure
 
-Generated on: 2026-05-26 00:19:17
+Generated on: 2026-05-26 03:18:26
 
 ```text
 fbi-crime-mcp-server/
@@ -104,26 +104,52 @@ fbi-crime-mcp-server/
 │   └── tool-defs-analysis/
 │       └── SKILL.md
 ├── src/
+│   ├── config/
+│   │   └── server-config.ts
 │   ├── mcp-server/
 │   │   ├── prompts/
 │   │   │   └── definitions/
-│   │   │       └── echo.prompt.ts
 │   │   ├── resources/
 │   │   │   └── definitions/
-│   │   │       ├── echo-app-ui.app-resource.ts
-│   │   │       └── echo.resource.ts
+│   │   │       ├── agency.resource.ts
+│   │   │       └── state.resource.ts
 │   │   └── tools/
 │   │       └── definitions/
-│   │           ├── echo-app.app-tool.ts
-│   │           └── echo.tool.ts
+│   │           ├── get-agency-offenses.tool.ts
+│   │           ├── get-agency.tool.ts
+│   │           ├── get-arrests.tool.ts
+│   │           ├── get-arson.tool.ts
+│   │           ├── get-crime-estimates.tool.ts
+│   │           ├── get-hate-crimes.tool.ts
+│   │           ├── get-human-trafficking.tool.ts
+│   │           ├── get-leoka.tool.ts
+│   │           ├── get-nibrs-breakdown.tool.ts
+│   │           ├── get-participation.tool.ts
+│   │           ├── list-code-table.tool.ts
+│   │           └── search-agencies.tool.ts
+│   ├── services/
+│   │   └── fbi-api/
+│   │       ├── fbi-api-service.ts
+│   │       └── types.ts
 │   └── index.ts
 ├── tests/
 │   ├── prompts/
-│   │   └── echo.prompt.test.ts
 │   ├── resources/
-│   │   └── echo.resource.test.ts
+│   │   ├── agency.resource.test.ts
+│   │   └── state.resource.test.ts
 │   └── tools/
-│       └── echo.tool.test.ts
+│       ├── get-agency-offenses.tool.test.ts
+│       ├── get-agency.tool.test.ts
+│       ├── get-arrests.tool.test.ts
+│       ├── get-arson.tool.test.ts
+│       ├── get-crime-estimates.tool.test.ts
+│       ├── get-hate-crimes.tool.test.ts
+│       ├── get-human-trafficking.tool.test.ts
+│       ├── get-leoka.tool.test.ts
+│       ├── get-nibrs-breakdown.tool.test.ts
+│       ├── get-participation.tool.test.ts
+│       ├── list-code-table.tool.test.ts
+│       └── search-agencies.tool.test.ts
 ├── .dockerignore
 ├── .env.example
 ├── .gitignore
