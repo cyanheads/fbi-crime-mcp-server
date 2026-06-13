@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: fbi-crime-mcp-server
+abstract: "Model Context Protocol (MCP) server for the FBI Crime Data Explorer, providing UCR estimates, NIBRS breakdowns, hate crime statistics, arrest data, and law enforcement agency information."
+type: software
+authors:
+  - family-names: Hand
+    given-names: Casey
+    orcid: "https://orcid.org/0009-0009-3726-568X"
+repository-code: "https://github.com/cyanheads/fbi-crime-mcp-server"
+license: Apache-2.0
+keywords:
+  - mcp
+  - model-context-protocol
+  - fbi
+  - crime-data
+  - ucr
+  - nibrs
