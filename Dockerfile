@@ -30,6 +30,8 @@ RUN bun run build
 # ==============================================================================
 FROM oven/bun:1.3-slim AS production
 
+ARG APP_VERSION
+
 WORKDIR /usr/src/app
 
 # Set the environment to production for performance and to ensure only
@@ -40,6 +42,7 @@ ENV NODE_ENV=production
 LABEL org.opencontainers.image.title="fbi-crime-mcp-server"
 LABEL org.opencontainers.image.description="Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP."
 LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL org.opencontainers.image.version="${APP_VERSION}"
 
 # Copy dependency manifests
 COPY package.json bun.lock ./
@@ -93,6 +96,9 @@ ENV MCP_FORCE_CONSOLE_LOGGING="true"
 
 # Expose the port the server listens on
 EXPOSE ${MCP_HTTP_PORT}
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD bun -e "fetch('http://localhost:' + (process.env.MCP_HTTP_PORT || '3010') + '/healthz').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 
 # The command to start the server
 CMD ["bun", "run", "dist/index.js"]
