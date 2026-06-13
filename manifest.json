@@ -1,9 +1,17 @@
 {
   "manifest_version": "0.3",
   "name": "fbi-crime-mcp-server",
-  "version": "0.1.3",
-  "description": "",
-  "author": { "name": "" },
+  "version": "0.1.4",
+  "description": "FBI Crime Data Explorer — UCR estimates, NIBRS breakdowns, hate crimes, arrests, and agency data.",
+  "author": {
+    "name": "cyanheads"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cyanheads/fbi-crime-mcp-server"
+  },
+  "homepage": "https://github.com/cyanheads/fbi-crime-mcp-server#readme",
+  "license": "Apache-2.0",
   "server": {
     "type": "node",
     "entry_point": "dist/index.js",
@@ -13,14 +21,25 @@
       "env": {
         "MCP_TRANSPORT_TYPE": "stdio",
         "MCP_AUTH_MODE": "none",
-        "NODE_ENV": "production"
+        "NODE_ENV": "production",
+        "FBI_API_KEY": "${user_config.fbi_api_key}"
       }
     }
   },
   "compatibility": {
-    "runtimes": { "node": ">=24.0.0" }
+    "runtimes": {
+      "node": ">=24.0.0"
+    }
   },
   "tools_generated": true,
   "prompts_generated": true,
-  "user_config": {}
+  "user_config": {
+    "fbi_api_key": {
+      "type": "string",
+      "title": "FBI CDE API Key",
+      "description": "api.data.gov API key for the FBI Crime Data Explorer. Free at https://api.data.gov/signup/.",
+      "required": true,
+      "sensitive": true
+    }
+  }
 }
