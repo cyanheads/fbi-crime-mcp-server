@@ -26,6 +26,8 @@ import { fbiSearchAgencies } from './mcp-server/tools/definitions/search-agencie
 import { initFbiApiService } from './services/fbi-api/fbi-api-service.js';
 
 await createApp({
+  name: 'fbi-crime-mcp-server',
+  title: 'fbi-crime-mcp-server',
   tools: [
     fbiListCodeTable,
     fbiSearchAgencies,

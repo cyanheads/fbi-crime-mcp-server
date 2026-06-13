@@ -41,7 +41,7 @@ export const fbiGetAgencyOffenses = tool('fbi_get_agency_offenses', {
   errors: [
     {
       reason: 'scope_param_missing',
-      code: JsonRpcErrorCode.InvalidParams,
+      code: JsonRpcErrorCode.ValidationError,
       when: 'scope is "state" but state_abbr is missing, or scope is "agency" but ori is missing.',
       recovery:
         'Provide state_abbr for state scope, or ori (9-character ORI code) for agency scope.',

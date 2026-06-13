@@ -18,7 +18,7 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
   errors: [
     {
       reason: 'month_required',
-      code: JsonRpcErrorCode.InvalidParams,
+      code: JsonRpcErrorCode.ValidationError,
       when: 'period is "monthly" but the month parameter was not provided.',
       recovery: 'Provide a month (1–12) when requesting monthly LEOKA data.',
     },
