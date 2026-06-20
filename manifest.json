@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "fbi-crime-mcp-server",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "FBI Crime Data Explorer — UCR estimates, NIBRS breakdowns, hate crimes, arrests, and agency data.",
   "author": {
     "name": "cyanheads"

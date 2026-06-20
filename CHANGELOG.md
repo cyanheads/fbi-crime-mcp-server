@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.1.6](changelog/0.1.x/0.1.6.md) — 2026-06-19
+
+Adopt @cyanheads/mcp-ts-core ^0.10.8 (canvas SQL invalid_sql classification, DuckdbProvider.describe() filter fix, ctx.content collector, fresh-scaffold devcheck guards, biome 2.5); re-sync devcheck scripts and skills; @types/node ^26
+
 ## [0.1.5](changelog/0.1.x/0.1.5.md) — 2026-06-19
 
 Fix fbi_get_leoka SerializationError on every call (nested deaths_by_region); point server instructions at active tools only and mark decommissioned resources UNAVAILABLE
