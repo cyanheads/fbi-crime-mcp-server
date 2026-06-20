@@ -45,11 +45,11 @@ await createApp({
   resources: [agencyResource, stateResource],
   prompts: [],
   instructions:
-    'FBI Crime Data Explorer MCP server. Provides access to UCR crime estimates, NIBRS incident breakdowns, agency offense counts, hate crimes, arrests, human trafficking, arson, LEOKA, and participation data.\n' +
-    '- Always call fbi_get_participation alongside crime count queries to assess data reliability\n' +
-    '- Use fbi_search_agencies to look up ORI codes before querying agency-level tools\n' +
-    '- Use fbi_list_code_table to find valid offense names, bias codes, and other parameter values\n' +
-    '- NIBRS tools (fbi_get_nibrs_breakdown) cover incident-based reporting only — not all agencies participate',
+    'FBI Crime Data Explorer MCP server (post-UCR decommission). Only CDE summarized and LEOKA endpoints are active.\n' +
+    '- Use fbi_get_crime_estimates for national, state, or agency-level offense trends (per-100k rates and counts by month)\n' +
+    '- Use fbi_get_agency_offenses for agency-scoped offense data when the ORI is already known\n' +
+    '- Use fbi_get_leoka for officer fatality, weapon, and circumstance data\n' +
+    '- All other tools (participation, agency search, code tables, NIBRS, arrests, hate crimes, arson, human trafficking) are decommissioned — they return errors; consult cde.ucr.cjis.gov for those datasets',
   setup(core) {
     const serverConfig = getServerConfig();
     initFbiApiService(core.config, core.storage, serverConfig);
