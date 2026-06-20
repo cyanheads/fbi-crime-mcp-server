@@ -33,7 +33,10 @@ const mockChartData = {
     Felonious: { '2022': 61, '2021': 73 },
     Accidental: { '2022': 57, '2021': 53 },
   },
-  officer_death_by_geographic_region: { South: 25, West: 15 },
+  officer_death_by_geographic_region: {
+    Felonious: { South: 31, West: 12, Midwest: 11, Northeast: 6 },
+    Accidental: { South: 30, West: 11, Midwest: 6, Northeast: 6 },
+  },
   lighting_conditions: { Daylight: 30, Dark: 20 },
 };
 
@@ -147,6 +150,33 @@ describe('fbiGetLeoka', () => {
     const text = (blocks[0] as { text: string }).text;
     expect(text).toContain('Lighting');
     expect(text).toContain('Daylight');
+  });
+
+  it('parses and renders nested deaths_by_region from the live API shape', async () => {
+    // Regression: the live /cde/leoka/ytd API returns officer_death_by_geographic_region
+    // nested by killing type ({ Felonious: { South: 31, ... }, Accidental: { ... } }), not
+    // a flat { South: 25, ... }. A flat output schema rejected it with SerializationError on
+    // every call, and a flat renderer would emit [object Object] / NaN. Drive the full path:
+    // handler → output.parse() (the framework's validation gate) → format().
+    mockGetLeokaYtd.mockResolvedValue(mockChartData);
+    const ctx = createMockContext({ errors: fbiGetLeoka.errors });
+    const input = fbiGetLeoka.input.parse({ period: 'ytd', year: 2022 });
+    const result = await fbiGetLeoka.handler(input, ctx);
+
+    // The output schema must accept the nested region shape (this is what crashed in prod).
+    const parsed = fbiGetLeoka.output.parse(result);
+    expect(parsed.deaths_by_region).toEqual({
+      Felonious: { South: 31, West: 12, Midwest: 11, Northeast: 6 },
+      Accidental: { South: 30, West: 11, Midwest: 6, Northeast: 6 },
+    });
+
+    // The renderer must surface real per-region counts, never [object Object] or NaN.
+    const text = (fbiGetLeoka.format!(parsed)[0] as { text: string }).text;
+    expect(text).toContain('Deaths by Geographic Region');
+    expect(text).toContain('| South | 31 | 30 |');
+    expect(text).toContain('| West | 12 | 11 |');
+    expect(text).not.toContain('[object Object]');
+    expect(text).not.toContain('NaN');
   });
 
   it('formats sparse output without crashing', () => {

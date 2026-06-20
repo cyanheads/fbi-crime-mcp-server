@@ -45,8 +45,8 @@ export interface FbiLeokaChartData {
   officer_activity?: Record<string, number>;
   /** Circumstances at time of attack. */
   officer_circumstances_time_of_attack?: Record<string, number>;
-  /** Geographic region breakdown. { "South": 25, ... } */
-  officer_death_by_geographic_region?: Record<string, number>;
+  /** Officer felonious/accidental deaths by geographic region. { "Felonious": { "South": 31, ... }, "Accidental": { "South": 30, ... } } */
+  officer_death_by_geographic_region?: Record<string, Record<string, number>>;
   /** Officer felonious/accidental deaths by month within each year. { "Felonious": { "2022": { "Jan": 4, ... } }, ... } */
   officer_death_by_month?: Record<string, Record<string, Record<string, number>>>;
   /** Time of day breakdown. */

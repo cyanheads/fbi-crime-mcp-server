@@ -98,11 +98,13 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
       .describe(
         'Annual officer death totals by type. Keys: "Felonious", "Accidental". Values: { "2022": 61, ... }',
       ),
-    /** Geographic region breakdown. */
+    /** Geographic region breakdown by killing type. */
     deaths_by_region: z
-      .record(z.string(), z.number())
+      .record(z.string(), z.unknown())
       .optional()
-      .describe('Officer death counts by geographic region (e.g. South, Northeast).'),
+      .describe(
+        'Officer death counts by killing type then region. Keys: "Felonious", "Accidental". Values: { "South": 31, "West": 12, ... }',
+      ),
     /** Lighting conditions at time of incident. */
     lighting_conditions: z
       .record(z.string(), z.number())
@@ -219,9 +221,15 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
 
     if (result.deaths_by_region && Object.keys(result.deaths_by_region).length > 0) {
       lines.push('', '### Deaths by Geographic Region');
-      lines.push('| Region | Count |', '|:-------|------:|');
-      for (const [k, v] of Object.entries(result.deaths_by_region).sort((a, b) => b[1] - a[1])) {
-        lines.push(`| ${k} | ${v} |`);
+      lines.push('| Region | Felonious | Accidental |', '|:-------|----------:|----------:|');
+      const felonious = (result.deaths_by_region['Felonious'] ?? {}) as Record<string, number>;
+      const accidental = (result.deaths_by_region['Accidental'] ?? {}) as Record<string, number>;
+      const regions = [...new Set([...Object.keys(felonious), ...Object.keys(accidental)])].sort(
+        (a, b) =>
+          (felonious[b] ?? 0) + (accidental[b] ?? 0) - ((felonious[a] ?? 0) + (accidental[a] ?? 0)),
+      );
+      for (const region of regions) {
+        lines.push(`| ${region} | ${felonious[region] ?? '—'} | ${accidental[region] ?? '—'} |`);
       }
     }
 
