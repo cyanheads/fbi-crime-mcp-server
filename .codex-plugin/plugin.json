@@ -1,0 +1,25 @@
+{
+  "name": "fbi-crime-mcp-server",
+  "version": "0.1.7",
+  "description": "Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP. STDIO or Streamable HTTP.",
+  "author": {
+    "name": "Casey Hand",
+    "email": "casey@caseyjhand.com",
+    "url": "https://caseyjhand.com"
+  },
+  "homepage": "https://github.com/cyanheads/fbi-crime-mcp-server#readme",
+  "repository": "https://github.com/cyanheads/fbi-crime-mcp-server",
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "mcp-server", "model-context-protocol", "crime-data", "fbi", "ucr", "nibrs", "hate-crimes", "public-safety", "law-enforcement", "crime-statistics", "cde"],
+  "mcpServers": "./.codex-plugin/mcp.json",
+  "interface": {
+    "displayName": "fbi-crime-mcp-server",
+    "shortDescription": "Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP.",
+    "longDescription": "Access the FBI Crime Data Explorer API through MCP. Query UCR crime estimates (per-100k rates and counts by month) at national, state, or agency scope, pull agency-scoped offense data by ORI code, and retrieve LEOKA officer fatality and assault data with circumstance and weapon detail. Runs over STDIO or Streamable HTTP; decommissioned legacy UCR tools return explicit errors pointing at the surviving CDE endpoints.",
+    "developerName": "Casey Hand",
+    "category": "data",
+    "capabilities": ["Read"],
+    "websiteURL": "https://github.com/cyanheads/fbi-crime-mcp-server",
+    "defaultPrompt": []
+  }
+}
