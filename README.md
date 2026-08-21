@@ -1,13 +1,13 @@
 <div align="center">
   <h1>@cyanheads/fbi-crime-mcp-server</h1>
-  <p><b>Exposes the FBI Crime Data Explorer API — crime estimates, agency offense rates, and LEOKA officer safety data via MCP. STDIO or Streamable HTTP.</b>
+  <p><b>Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP. STDIO or Streamable HTTP.</b>
   <div>12 Tools (4 active via CDE API, 8 decommissioned) • 2 Resources</div>
   </p>
 </div>
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-0.1.5-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/fbi-crime-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-^1.29.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/fbi-crime-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/fbi-crime-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^6.0.3-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.3.11-blueviolet.svg?style=flat-square)](https://bun.sh/)
+[![Version](https://img.shields.io/badge/Version-0.1.7-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/fbi-crime-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-2.0.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/fbi-crime-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/fbi-crime-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.0-blueviolet.svg?style=flat-square)](https://bun.sh/)
 
 </div>
 
@@ -103,7 +103,7 @@ FBI Crime Data Explorer-specific:
 
 - **CDE API** (`/cde/summarized/`, `/cde/leoka/`) — the surviving FBI endpoints post-UCR decommission
 - Decommissioned tools return a `ServiceUnavailable` error with a recovery hint pointing to [cde.ucr.cjis.gov](https://cde.ucr.cjis.gov/) — agents can report the gap rather than silently failing
-- DEMO_KEY mode for no-config exploration; registered api.data.gov key for production throughput
+- `DEMO_KEY` works without signing up (rate-limited shared pool); a registered api.data.gov key for production throughput
 
 ## Getting started
 
