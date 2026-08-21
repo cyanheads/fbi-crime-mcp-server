@@ -11,13 +11,17 @@ describe('fbiSearchAgencies', () => {
   it('always throws endpoint_decommissioned', async () => {
     const ctx = createMockContext({ errors: fbiSearchAgencies.errors });
     const input = fbiSearchAgencies.input.parse({ state_abbr: 'CA', page: 1, per_page: 25 });
-    await expect(fbiSearchAgencies.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiSearchAgencies.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('throws without any filter parameters', async () => {
     const ctx = createMockContext({ errors: fbiSearchAgencies.errors });
     const input = fbiSearchAgencies.input.parse({ page: 1, per_page: 25 });
-    await expect(fbiSearchAgencies.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiSearchAgencies.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('format returns unavailability message', () => {

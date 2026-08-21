@@ -11,7 +11,9 @@ describe('fbiGetHateCrimes', () => {
   it('always throws endpoint_decommissioned for national scope', async () => {
     const ctx = createMockContext({ errors: fbiGetHateCrimes.errors });
     const input = fbiGetHateCrimes.input.parse({ scope: 'national', cross_offense: false });
-    await expect(fbiGetHateCrimes.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetHateCrimes.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('always throws endpoint_decommissioned for state scope', async () => {
@@ -21,7 +23,9 @@ describe('fbiGetHateCrimes', () => {
       state_abbr: 'NY',
       cross_offense: false,
     });
-    await expect(fbiGetHateCrimes.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetHateCrimes.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('format returns unavailability message', () => {

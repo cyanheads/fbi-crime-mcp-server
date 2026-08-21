@@ -34,7 +34,7 @@ export const fbiGetParticipation = tool('fbi_get_participation', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(_input, _ctx) {
+  handler(_input, _ctx) {
     throw serviceUnavailable(
       'The FBI participation endpoint has been decommissioned. Both the UCR legacy backend and CDE /LATEST/participation/ paths return 404. Access participation data at cde.ucr.cjis.gov.',
     );

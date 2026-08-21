@@ -15,7 +15,9 @@ describe('fbiGetNibrsBreakdown', () => {
       variable: 'race_code',
       scope: 'national',
     });
-    await expect(fbiGetNibrsBreakdown.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetNibrsBreakdown.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('always throws endpoint_decommissioned for state victims', async () => {
@@ -26,7 +28,9 @@ describe('fbiGetNibrsBreakdown', () => {
       scope: 'state',
       state_abbr: 'CA',
     });
-    await expect(fbiGetNibrsBreakdown.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetNibrsBreakdown.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('format returns unavailability message', () => {

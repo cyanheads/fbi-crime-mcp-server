@@ -33,7 +33,7 @@ export const fbiGetHumanTrafficking = tool('fbi_get_human_trafficking', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(_input, _ctx) {
+  handler(_input, _ctx) {
     throw serviceUnavailable(
       'The FBI human trafficking endpoint (UCR /ht/) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Access human trafficking data at cde.ucr.cjis.gov.',
     );

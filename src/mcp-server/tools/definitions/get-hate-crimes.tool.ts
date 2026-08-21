@@ -33,7 +33,7 @@ export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(_input, _ctx) {
+  handler(_input, _ctx) {
     throw serviceUnavailable(
       'The FBI hate crimes endpoint (UCR /hc/count/) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Access hate crime data at cde.ucr.cjis.gov.',
     );

@@ -11,13 +11,13 @@ describe('fbiGetAgency', () => {
   it('always throws endpoint_decommissioned', async () => {
     const ctx = createMockContext({ errors: fbiGetAgency.errors });
     const input = fbiGetAgency.input.parse({ ori: 'CA0010400' });
-    await expect(fbiGetAgency.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetAgency.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
   });
 
   it('throws for any ORI', async () => {
     const ctx = createMockContext({ errors: fbiGetAgency.errors });
     const input = fbiGetAgency.input.parse({ ori: 'TX0010400' });
-    await expect(fbiGetAgency.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetAgency.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
   });
 
   it('format returns unavailability message', () => {

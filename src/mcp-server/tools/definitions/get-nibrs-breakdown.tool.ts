@@ -67,7 +67,7 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(_input, _ctx) {
+  handler(_input, _ctx) {
     throw serviceUnavailable(
       'The FBI NIBRS breakdown endpoint has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Access NIBRS data at cde.ucr.cjis.gov.',
     );

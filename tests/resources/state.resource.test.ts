@@ -11,12 +11,12 @@ describe('stateResource', () => {
   it('always throws endpoint_decommissioned for any state', async () => {
     const ctx = createMockContext({ tenantId: 'test-tenant' });
     const params = stateResource.params.parse({ state_abbr: 'CA' });
-    await expect(stateResource.handler(params, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => stateResource.handler(params, ctx)).rejects.toThrow(/decommissioned/i);
   });
 
   it('throws for any state abbreviation including unknown ones', async () => {
     const ctx = createMockContext({ tenantId: 'test-tenant' });
     const params = stateResource.params.parse({ state_abbr: 'ZZ' });
-    await expect(stateResource.handler(params, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => stateResource.handler(params, ctx)).rejects.toThrow(/decommissioned/i);
   });
 });

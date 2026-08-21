@@ -11,13 +11,17 @@ describe('fbiListCodeTable', () => {
   it('always throws endpoint_decommissioned for offenses table', async () => {
     const ctx = createMockContext({ errors: fbiListCodeTable.errors });
     const input = fbiListCodeTable.input.parse({ table: 'offenses' });
-    await expect(fbiListCodeTable.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiListCodeTable.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('always throws endpoint_decommissioned for bias_motivation table', async () => {
     const ctx = createMockContext({ errors: fbiListCodeTable.errors });
     const input = fbiListCodeTable.input.parse({ table: 'bias_motivation' });
-    await expect(fbiListCodeTable.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiListCodeTable.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('format returns unavailability message', () => {

@@ -11,13 +11,13 @@ describe('fbiGetArrests', () => {
   it('always throws endpoint_decommissioned', async () => {
     const ctx = createMockContext({ errors: fbiGetArrests.errors });
     const input = fbiGetArrests.input.parse({ since_year: 2022, until_year: 2022 });
-    await expect(fbiGetArrests.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetArrests.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
   });
 
   it('throws even without year range parameters', async () => {
     const ctx = createMockContext({ errors: fbiGetArrests.errors });
     const input = fbiGetArrests.input.parse({});
-    await expect(fbiGetArrests.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetArrests.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
   });
 
   it('format returns unavailability message', () => {

@@ -30,7 +30,7 @@ export const fbiGetAgency = tool('fbi_get_agency', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(_input, _ctx) {
+  handler(_input, _ctx) {
     throw serviceUnavailable(
       'The FBI agency profile endpoint (UCR /agencies/{ori}) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Look up agency details at cde.ucr.cjis.gov.',
     );

@@ -17,7 +17,7 @@ export const stateResource = resource('fbi://state/{state_abbr}', {
   }),
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(params, _ctx) {
+  handler(params, _ctx) {
     throw serviceUnavailable(
       `The FBI state participation endpoint has been decommissioned. Cannot retrieve overview for state "${params.state_abbr}". The CDE /LATEST/participation/ paths return 404.`,
     );

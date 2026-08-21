@@ -15,7 +15,7 @@ import type { Context } from '@cyanheads/mcp-ts-core';
 import type { AppConfig } from '@cyanheads/mcp-ts-core/config';
 import { serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
 import type { StorageService } from '@cyanheads/mcp-ts-core/storage';
-import { httpErrorFromResponse, withRetry } from '@cyanheads/mcp-ts-core/utils';
+import { fetchWithTimeout, withRetry } from '@cyanheads/mcp-ts-core/utils';
 import type { ServerConfig } from '@/config/server-config.js';
 import type { FbiLeokaChartData, FbiSummarizedResponse } from './types.js';
 
@@ -50,21 +50,11 @@ export class FbiApiService {
   private get<T>(url: string, ctx: Context): Promise<T> {
     return withRetry(
       async () => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-        ctx.signal.addEventListener('abort', () => controller.abort(), { once: true });
-        let response: Response;
-        try {
-          response = await fetch(url, { signal: controller.signal });
-        } finally {
-          clearTimeout(timer);
-        }
-        if (!response.ok) {
-          throw await httpErrorFromResponse(response, {
-            service: 'FBI CDE API',
-            data: { url: url.split('?')[0] },
-          });
-        }
+        // Log the URL without its api_key query param.
+        ctx.log.debug('FBI CDE API request', { url: url.split('?')[0] });
+        const response = await fetchWithTimeout(url, this.timeoutMs, ctx, {
+          signal: ctx.signal,
+        });
         const text = await response.text();
         if (/^\s*<(!DOCTYPE\s+html|html[\s>])/i.test(text)) {
           throw serviceUnavailable(
@@ -75,6 +65,7 @@ export class FbiApiService {
       },
       {
         operation: 'FbiApiService.get',
+        context: ctx,
         baseDelayMs: 1500,
         signal: ctx.signal,
       },
@@ -114,7 +105,7 @@ export class FbiApiService {
   // Valid offenses: violent-crime, property-crime, robbery, burglary, larceny, motor-vehicle-theft,
   //                arson, aggravated-assault, rape, homicide
 
-  async getSummarizedNational(
+  getSummarizedNational(
     offense: string,
     params: { from: string; to: string },
     ctx: Context,
@@ -127,7 +118,7 @@ export class FbiApiService {
     return this.get<FbiSummarizedResponse>(url, ctx);
   }
 
-  async getSummarizedState(
+  getSummarizedState(
     stateAbbr: string,
     offense: string,
     params: { from: string; to: string },
@@ -142,7 +133,7 @@ export class FbiApiService {
     return this.get<FbiSummarizedResponse>(url, ctx);
   }
 
-  async getSummarizedAgency(
+  getSummarizedAgency(
     ori: string,
     offense: string,
     params: { from: string; to: string },

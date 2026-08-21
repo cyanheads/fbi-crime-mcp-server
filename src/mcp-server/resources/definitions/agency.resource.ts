@@ -17,7 +17,7 @@ export const agencyResource = resource('fbi://agency/{ori}', {
   }),
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(params, _ctx) {
+  handler(params, _ctx) {
     throw serviceUnavailable(
       `The FBI agency profile endpoint has been decommissioned. Cannot retrieve profile for ORI "${params.ori}". Look up agency details at cde.ucr.cjis.gov.`,
     );

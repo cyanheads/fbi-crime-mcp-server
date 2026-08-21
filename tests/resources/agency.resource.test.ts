@@ -11,12 +11,16 @@ describe('agencyResource', () => {
   it('always throws endpoint_decommissioned for any ORI', async () => {
     const ctx = createMockContext({ tenantId: 'test-tenant' });
     const params = agencyResource.params.parse({ ori: 'CA0010400' });
-    await expect(agencyResource.handler(params, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => agencyResource.handler(params, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('throws for any ORI including unknown ones', async () => {
     const ctx = createMockContext({ tenantId: 'test-tenant' });
     const params = agencyResource.params.parse({ ori: 'XX9999999' });
-    await expect(agencyResource.handler(params, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => agencyResource.handler(params, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 });

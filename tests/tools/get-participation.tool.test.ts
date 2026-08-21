@@ -11,7 +11,9 @@ describe('fbiGetParticipation', () => {
   it('always throws endpoint_decommissioned for national scope', async () => {
     const ctx = createMockContext({ errors: fbiGetParticipation.errors });
     const input = fbiGetParticipation.input.parse({ scope: 'national', page: 1, per_page: 50 });
-    await expect(fbiGetParticipation.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetParticipation.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('always throws endpoint_decommissioned for state scope', async () => {
@@ -22,7 +24,9 @@ describe('fbiGetParticipation', () => {
       page: 1,
       per_page: 50,
     });
-    await expect(fbiGetParticipation.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetParticipation.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('always throws endpoint_decommissioned for agency scope', async () => {
@@ -33,7 +37,9 @@ describe('fbiGetParticipation', () => {
       page: 1,
       per_page: 50,
     });
-    await expect(fbiGetParticipation.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetParticipation.handler(input, ctx)).rejects.toThrow(
+      /decommissioned/i,
+    );
   });
 
   it('format returns unavailability message', () => {

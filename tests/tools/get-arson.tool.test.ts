@@ -11,13 +11,13 @@ describe('fbiGetArson', () => {
   it('always throws endpoint_decommissioned for national scope', async () => {
     const ctx = createMockContext({ errors: fbiGetArson.errors });
     const input = fbiGetArson.input.parse({ scope: 'national' });
-    await expect(fbiGetArson.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetArson.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
   });
 
   it('always throws endpoint_decommissioned for state scope', async () => {
     const ctx = createMockContext({ errors: fbiGetArson.errors });
     const input = fbiGetArson.input.parse({ scope: 'state', state_abbr: 'CA' });
-    await expect(fbiGetArson.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
+    await expect(async () => fbiGetArson.handler(input, ctx)).rejects.toThrow(/decommissioned/i);
   });
 
   it('format returns redirect instructions', () => {

@@ -35,7 +35,7 @@ export const fbiGetArson = tool('fbi_get_arson', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(_input, _ctx) {
+  handler(_input, _ctx) {
     throw serviceUnavailable(
       'The dedicated arson endpoint (UCR /arson/) has been decommissioned. Use fbi_get_crime_estimates with offense="arson" to get arson data via the CDE summarized API.',
     );

@@ -30,7 +30,7 @@ export const fbiGetArrests = tool('fbi_get_arrests', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  async handler(_input, _ctx) {
+  handler(_input, _ctx) {
     throw serviceUnavailable(
       'The FBI arrests endpoint (UCR /arrests/national) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Access arrest data at cde.ucr.cjis.gov.',
     );
