@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.1.7](changelog/0.1.x/0.1.7.md) — 2026-08-21
+
+Adopts @cyanheads/mcp-ts-core ^0.10.8 → ^0.12.3 — MCP SDK v2 lineage, strict tool inputs, fetchWithTimeout with Timeout classification and Retry-After retries — plus a bun supply-chain guard, TypeScript 7, plugin manifests, and community health files
+
 ## [0.1.6](changelog/0.1.x/0.1.6.md) — 2026-06-19
 
 Adopt @cyanheads/mcp-ts-core ^0.10.8 (canvas SQL invalid_sql classification, DuckdbProvider.describe() filter fix, ctx.content collector, fresh-scaffold devcheck guards, biome 2.5); re-sync devcheck scripts and skills; @types/node ^26

@@ -1,8 +1,8 @@
 {
   "manifest_version": "0.3",
   "name": "fbi-crime-mcp-server",
-  "version": "0.1.6",
-  "description": "FBI Crime Data Explorer — UCR estimates, NIBRS breakdowns, hate crimes, arrests, and agency data.",
+  "version": "0.1.7",
+  "description": "Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP. STDIO or Streamable HTTP.",
   "author": {
     "name": "cyanheads"
   },
