@@ -4,6 +4,7 @@
     "args": ["-y", "@cyanheads/fbi-crime-mcp-server"],
     "env": {
       "MCP_TRANSPORT_TYPE": "stdio"
-    }
+    },
+    "env_vars": ["FBI_API_KEY"]
   }
 }

@@ -1,20 +1,46 @@
 {
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "fbi-crime-mcp-server",
   "version": "0.1.7",
   "description": "Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP. STDIO or Streamable HTTP.",
   "author": {
     "name": "Casey Hand",
-    "email": "casey@caseyjhand.com"
+    "email": "casey@caseyjhand.com",
+    "url": "https://caseyjhand.com"
   },
   "homepage": "https://github.com/cyanheads/fbi-crime-mcp-server#readme",
   "repository": "https://github.com/cyanheads/fbi-crime-mcp-server",
   "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "crime-data",
+    "fbi",
+    "ucr",
+    "nibrs",
+    "hate-crimes",
+    "public-safety",
+    "law-enforcement",
+    "crime-statistics",
+    "cde"
+  ],
+  "userConfig": {
+    "fbi_api_key": {
+      "type": "string",
+      "title": "FBI CDE API Key",
+      "description": "api.data.gov API key for the FBI Crime Data Explorer. Free at https://api.data.gov/signup/.",
+      "required": true,
+      "sensitive": true
+    }
+  },
   "mcpServers": {
     "fbi-crime-mcp-server": {
       "command": "npx",
       "args": ["-y", "@cyanheads/fbi-crime-mcp-server"],
       "env": {
-        "MCP_TRANSPORT_TYPE": "stdio"
+        "MCP_TRANSPORT_TYPE": "stdio",
+        "FBI_API_KEY": "${user_config.fbi_api_key}"
       }
     }
   }
