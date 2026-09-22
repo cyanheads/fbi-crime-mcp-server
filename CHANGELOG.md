@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.1.8](changelog/0.1.x/0.1.8.md) — 2026-09-21
+
+Agency-scope queries report the agency's own rates, HTTP session mode defaults to stateless however the server is launched, and decommissioned tools return their declared recovery hints. Adopts @cyanheads/mcp-ts-core ^0.13.6.
+
 ## [0.1.7](changelog/0.1.x/0.1.7.md) — 2026-08-21
 
 Adopts @cyanheads/mcp-ts-core ^0.10.8 → ^0.12.3 — MCP SDK v2 lineage, strict tool inputs, fetchWithTimeout with Timeout classification and Retry-After retries — plus a bun supply-chain guard, TypeScript 7, plugin manifests, and community health files
