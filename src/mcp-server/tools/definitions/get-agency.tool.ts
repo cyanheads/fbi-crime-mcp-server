@@ -6,7 +6,7 @@
  */
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
-import { JsonRpcErrorCode, serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
+import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 
 export const fbiGetAgency = tool('fbi_get_agency', {
   title: 'FBI Get Agency',
@@ -30,9 +30,11 @@ export const fbiGetAgency = tool('fbi_get_agency', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  handler(_input, _ctx) {
-    throw serviceUnavailable(
+  handler(_input, ctx) {
+    throw ctx.fail(
+      'endpoint_decommissioned',
       'The FBI agency profile endpoint (UCR /agencies/{ori}) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Look up agency details at cde.ucr.cjis.gov.',
+      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

@@ -6,7 +6,7 @@
  */
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
-import { JsonRpcErrorCode, serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
+import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 
 export const fbiGetArson = tool('fbi_get_arson', {
   title: 'FBI Get Arson',
@@ -35,9 +35,11 @@ export const fbiGetArson = tool('fbi_get_arson', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  handler(_input, _ctx) {
-    throw serviceUnavailable(
+  handler(_input, ctx) {
+    throw ctx.fail(
+      'endpoint_decommissioned',
       'The dedicated arson endpoint (UCR /arson/) has been decommissioned. Use fbi_get_crime_estimates with offense="arson" to get arson data via the CDE summarized API.',
+      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

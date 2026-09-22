@@ -5,7 +5,7 @@
  */
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
-import { JsonRpcErrorCode, serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
+import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 
 const VALID_TABLES = [
   'offenses',
@@ -42,9 +42,11 @@ export const fbiListCodeTable = tool('fbi_list_code_table', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  handler(_input, _ctx) {
-    throw serviceUnavailable(
+  handler(_input, ctx) {
+    throw ctx.fail(
+      'endpoint_decommissioned',
       'The FBI code table endpoint (UCR /codes/) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Reference code values at cde.ucr.cjis.gov.',
+      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

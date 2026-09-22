@@ -5,7 +5,7 @@
  */
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
-import { JsonRpcErrorCode, serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
+import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 
 export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
   title: 'FBI Get Hate Crimes',
@@ -33,9 +33,11 @@ export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  handler(_input, _ctx) {
-    throw serviceUnavailable(
+  handler(_input, ctx) {
+    throw ctx.fail(
+      'endpoint_decommissioned',
       'The FBI hate crimes endpoint (UCR /hc/count/) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Access hate crime data at cde.ucr.cjis.gov.',
+      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

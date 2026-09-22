@@ -5,7 +5,7 @@
  */
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
-import { JsonRpcErrorCode, serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
+import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 
 export const fbiGetParticipation = tool('fbi_get_participation', {
   title: 'FBI Get Participation',
@@ -34,9 +34,11 @@ export const fbiGetParticipation = tool('fbi_get_participation', {
 
   output: z.object({}).passthrough().describe('Always empty — handler always throws.'),
 
-  handler(_input, _ctx) {
-    throw serviceUnavailable(
+  handler(_input, ctx) {
+    throw ctx.fail(
+      'endpoint_decommissioned',
       'The FBI participation endpoint has been decommissioned. Both the UCR legacy backend and CDE /LATEST/participation/ paths return 404. Access participation data at cde.ucr.cjis.gov.',
+      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 
