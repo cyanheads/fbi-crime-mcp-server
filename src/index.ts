@@ -28,6 +28,7 @@ import { initFbiApiService } from './services/fbi-api/fbi-api-service.js';
 await createApp({
   name: 'fbi-crime-mcp-server',
   title: 'fbi-crime-mcp-server',
+  sessionMode: 'stateless',
   tools: [
     fbiListCodeTable,
     fbiSearchAgencies,
