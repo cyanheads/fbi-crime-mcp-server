@@ -77,9 +77,9 @@ export interface FbiSummarizedResponse {
     last_refresh_date?: Record<string, string>;
   };
   offenses: {
-    /** Per-100k rates by location and month. Keys: "United States Offenses", "California Offenses", "Agency Name Offenses", clearance equivalents. */
+    /** Per-100k rates by location and month. Keys: "{Entity} Offenses" / "{Entity} Clearances"; an agency response also lists its state and "United States", ahead of the agency. */
     rates: Record<string, Record<string, number>>;
-    /** Absolute offense/clearance counts by location and month. Same key structure as rates. */
+    /** Absolute offense/clearance counts by month, keyed like `rates` but for the scoped entity only. */
     actuals: Record<string, Record<string, number>>;
   };
   /** Population data by location and month. */

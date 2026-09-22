@@ -157,19 +157,25 @@ export const fbiGetAgencyOffenses = tool('fbi_get_agency_offenses', {
           ? await svc.getSummarizedState(stateAbbr, input.offense, { from, to }, ctx)
           : await svc.getSummarizedAgency(ori, input.offense, { from, to }, ctx);
 
+    // Keys are "{Entity} Offenses" / "{Entity} Clearances". `actuals` carries only the
+    // scoped entity (the nation, the state, or the agency), while `rates` also lists an
+    // agency's state and the nation — so the entity named in `actuals` selects the rates.
     const offenseRates = data.offenses.rates;
     const offenseActuals = data.offenses.actuals;
 
-    const offenseKey = Object.keys(offenseRates).find((k) => k.endsWith('Offenses')) ?? '';
-    const clearanceKey = Object.keys(offenseRates).find((k) => k.endsWith('Clearances')) ?? '';
-    const actualOffenseKey = Object.keys(offenseActuals).find((k) => k.endsWith('Offenses')) ?? '';
-    const actualClearanceKey =
-      Object.keys(offenseActuals).find((k) => k.endsWith('Clearances')) ?? '';
+    const entity = Object.keys(offenseActuals)
+      .find((k) => k.endsWith(' Offenses'))
+      ?.slice(0, -' Offenses'.length);
+    const series = (
+      map: Record<string, Record<string, number>>,
+      kind: 'Offenses' | 'Clearances',
+    ): Record<string, number> =>
+      (entity === undefined ? undefined : map[`${entity} ${kind}`]) ?? {};
 
-    const rateData = offenseRates[offenseKey] ?? {};
-    const clearanceRateData = offenseRates[clearanceKey] ?? {};
-    const actualData = offenseActuals[actualOffenseKey] ?? {};
-    const clearanceActualData = offenseActuals[actualClearanceKey] ?? {};
+    const rateData = series(offenseRates, 'Offenses');
+    const clearanceRateData = series(offenseRates, 'Clearances');
+    const actualData = series(offenseActuals, 'Offenses');
+    const clearanceActualData = series(offenseActuals, 'Clearances');
 
     const allKeys = new Set([...Object.keys(rateData), ...Object.keys(actualData)]);
 

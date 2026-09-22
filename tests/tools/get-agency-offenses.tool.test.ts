@@ -44,6 +44,28 @@ const mockStateResponse = {
   },
 };
 
+/**
+ * Agency-scope response in the key order the live CDE returns: `rates` lists the
+ * agency's state and the nation ahead of the agency itself; `actuals` holds only
+ * the agency.
+ */
+const mockAgencyLiveShapeResponse = {
+  offenses: {
+    rates: {
+      'California Offenses': { '01-2022': 10.89 },
+      'California Clearances': { '01-2022': 2.7 },
+      'United States Offenses': { '01-2022': 5.58 },
+      'United States Clearances': { '01-2022': 1.28 },
+      'Emeryville Police Department Offenses': { '01-2022': 70.31 },
+      'Emeryville Police Department Clearances': { '01-2022': 15.62 },
+    },
+    actuals: {
+      'Emeryville Police Department Offenses': { '01-2022': 9 },
+      'Emeryville Police Department Clearances': { '01-2022': 2 },
+    },
+  },
+};
+
 describe('fbiGetAgencyOffenses', () => {
   beforeEach(() => {
     mockGetSummarizedNational.mockReset();
@@ -72,6 +94,31 @@ describe('fbiGetAgencyOffenses', () => {
     const jan = result.months.find((m) => m.month === 1 && m.year === 2022);
     expect(jan?.rate_per_100k).toBe(250.0);
     expect(jan?.actual_count).toBe(512);
+  });
+
+  it("agency scope reports the agency's own rates, not its state's", async () => {
+    mockGetSummarizedAgency.mockResolvedValue(mockAgencyLiveShapeResponse);
+    const ctx = createMockContext({ errors: fbiGetAgencyOffenses.errors });
+    const input = fbiGetAgencyOffenses.input.parse({
+      scope: 'agency',
+      offense: 'robbery',
+      ori: 'CA0010400',
+      from_year: 2022,
+      from_month: 1,
+      to_year: 2022,
+      to_month: 1,
+    });
+    const result = await fbiGetAgencyOffenses.handler(input, ctx);
+    expect(result.months).toEqual([
+      {
+        year: 2022,
+        month: 1,
+        rate_per_100k: 70.31,
+        clearance_rate_per_100k: 15.62,
+        actual_count: 9,
+        clearance_count: 2,
+      },
+    ]);
   });
 
   it('returns monthly offense rows for state scope', async () => {
