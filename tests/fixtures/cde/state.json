@@ -1,0 +1,38 @@
+{
+  "offenses": {
+    "rates": {
+      "California Offenses": { "01-2022": 10.89 },
+      "California Clearances": { "01-2022": 2.7 },
+      "United States Offenses": { "01-2022": 5.9 },
+      "United States Clearances": { "01-2022": 1.35 }
+    },
+    "actuals": {
+      "California Offenses": { "01-2022": 4208 },
+      "California Clearances": { "01-2022": 1042 }
+    }
+  },
+  "tooltips": {
+    "leftYAxisHeaders": {
+      "yAxisHeaderRates": "Offenses per 100,000 people",
+      "yAxisHeaderActual": "Offenses"
+    },
+    "Percent of Population Coverage": {
+      "California": { "01-2022": 99.01 },
+      "United States": { "01-2022": 93.61 }
+    }
+  },
+  "populations": {
+    "population": {
+      "California": { "01-2022": 39029342 },
+      "United States": { "01-2022": 336746447 }
+    },
+    "participated_population": {
+      "California": { "01-2022": 38642850 },
+      "United States": { "01-2022": 315231910 }
+    }
+  },
+  "cde_properties": {
+    "max_data_date": { "UCR": "09/2026" },
+    "last_refresh_date": { "UCR": "09/15/2026" }
+  }
+}

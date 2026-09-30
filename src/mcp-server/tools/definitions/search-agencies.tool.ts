@@ -54,7 +54,6 @@ export const fbiSearchAgencies = tool('fbi_search_agencies', {
     throw ctx.fail(
       'endpoint_decommissioned',
       'The FBI agency search endpoint (UCR /agencies) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Look up agency ORI codes at cde.ucr.cjis.gov or contact the FBI UCR program directly.',
-      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

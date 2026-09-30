@@ -37,7 +37,6 @@ export const fbiGetHumanTrafficking = tool('fbi_get_human_trafficking', {
     throw ctx.fail(
       'endpoint_decommissioned',
       'The FBI human trafficking endpoint (UCR /ht/) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Access human trafficking data at cde.ucr.cjis.gov.',
-      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

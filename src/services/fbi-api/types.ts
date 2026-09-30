@@ -1,91 +1,99 @@
 /**
- * @fileoverview Shared types for FBI Crime Data Explorer API responses.
- * Reflects the actual CDE API as of 2026-05-25.
- * UCR legacy endpoints are decommissioned — only CDE endpoints remain active.
+ * @fileoverview Validated FBI CDE response shapes, including sparse count records.
  * @module services/fbi-api/types
  */
 
-/**
- * LEOKA chart data returned by /cde/leoka/ytd and /cde/leoka/monthly.
- * Both endpoints wrap this inside:
- *   ytd:     [{ leoka_chart_ytd:     { data: { chart_data: FbiLeokaChartData } } }]
- *   monthly: [{ leoka_chart_monthly: { data: { chart_data: FbiLeokaChartData } } }]
- */
-export interface FbiLeokaChartData {
-  /** Body armor worn status. { "Yes": 3, "No": 55, ... } */
-  body_armor_worn?: Record<string, number>;
-  /** Officers killed/assaulted totals for the period. */
-  incidents_victim_officer_totals_ytd?: {
-    /** Total officers killed (feloniously + accidentally). */
-    total_officers?: number;
-    /** Total incidents (one or more officers may be killed per incident). */
-    total_incidents?: number;
-    /** Officers killed due to a felonious act. */
-    total_officers_dod?: number;
-    /** Officers killed due to an accident. */
-    total_officers_doi?: number;
-    /** Incidents involving a felonious killing. */
-    total_incidents_dod?: number;
-    /** Incidents involving an accidental killing. */
-    total_incidents_doi?: number;
-  };
-  /** Lighting conditions. { "Daylight": 30, ... } */
-  lighting_conditions?: Record<string, number>;
-  /** Location of attack breakdown. { "Ambush": 5, ... } */
-  location_of_attack?: Record<string, number>;
-  /** Offender demographic breakdown. */
-  offender_demographic?: Record<string, unknown>;
-  /** Whether offender was previously known to agency. */
-  offender_previously_known_to_agency?: Record<string, number>;
-  /** Prior mental illness status of offender. */
-  offender_prior_mental_illness?: Record<string, number>;
-  /** Prior relationship of offender to officer. */
-  offender_prior_relationship?: Record<string, number>;
-  /** Officer activity at time of incident. { "Patrolling": 17, ... } */
-  officer_activity?: Record<string, number>;
-  /** Circumstances at time of attack. */
-  officer_circumstances_time_of_attack?: Record<string, number>;
-  /** Officer felonious/accidental deaths by geographic region. { "Felonious": { "South": 31, ... }, "Accidental": { "South": 30, ... } } */
-  officer_death_by_geographic_region?: Record<string, Record<string, number>>;
-  /** Officer felonious/accidental deaths by month within each year. { "Felonious": { "2022": { "Jan": 4, ... } }, ... } */
-  officer_death_by_month?: Record<string, Record<string, Record<string, number>>>;
-  /** Time of day breakdown. */
-  officer_death_by_time_of_day?: Record<string, number>;
-  /** Officer felonious/accidental deaths by calendar year. { "Felonious": { "2022": 61, ... }, "Accidental": { "2022": 57, ... } } */
-  officer_death_by_year?: Record<string, Record<string, number>>;
-  /** Officer demographic breakdown. */
-  officer_demographic?: Record<string, unknown>;
-  /** Officer incident type breakdown. { "Fall": 2, ... } */
-  officer_incident_type?: Record<string, number>;
-  /** Officer type of assignment. */
-  officer_type_of_assignment?: Record<string, number>;
-  /** Weapon counts for the period. { "Handguns": 34, "Rifles": 10, ... } */
-  weapons?: Record<string, number>;
-  /** Weather conditions. { "Clear": 40, ... } */
-  weather_conditions?: Record<string, number>;
-}
+import { z } from '@cyanheads/mcp-ts-core';
+
+/** Category or month key to count; null means unavailable, never zero. */
+export const CountMapSchema = z.record(z.string(), z.number().nullable());
+/** Dimension or killing type to category counts; null subgroups stay explicit. */
+export const NestedCountMapSchema = z.record(z.string(), CountMapSchema.nullable());
+/** Killing type to year to month counts, including comparison years. */
+export const MonthlyCountMapSchema = z.record(z.string(), NestedCountMapSchema.nullable());
+
+/** Raw incidents_victim_officer_totals_ytd block, returned by both LEOKA periods. */
+export const FbiLeokaTotalsSchema = z.object({
+  total_officers: z
+    .number()
+    .nullable()
+    .optional()
+    .describe(
+      'CDE YTD total officers from incidents_victim_officer_totals_ytd; not a combined fatality or requested-month count.',
+    ),
+  total_incidents: z
+    .number()
+    .nullable()
+    .optional()
+    .describe(
+      'CDE YTD total incidents from incidents_victim_officer_totals_ytd; not a combined fatality or requested-month count.',
+    ),
+  total_officers_dod: z
+    .number()
+    .nullable()
+    .optional()
+    .describe('Raw total_officers_dod from the CDE YTD block; dod interpretation is unspecified.'),
+  total_officers_doi: z
+    .number()
+    .nullable()
+    .optional()
+    .describe('Raw total_officers_doi from the CDE YTD block; doi interpretation is unspecified.'),
+  total_incidents_dod: z
+    .number()
+    .nullable()
+    .optional()
+    .describe('Raw total_incidents_dod from the CDE YTD block; dod interpretation is unspecified.'),
+  total_incidents_doi: z
+    .number()
+    .nullable()
+    .optional()
+    .describe('Raw total_incidents_doi from the CDE YTD block; doi interpretation is unspecified.'),
+});
+
+/** LEOKA chart_data shared by the YTD and monthly envelopes. */
+export const FbiLeokaChartSchema = z.object({
+  incidents_victim_officer_totals_ytd: FbiLeokaTotalsSchema.nullish(),
+  body_armor_worn: CountMapSchema.nullish(),
+  lighting_conditions: CountMapSchema.nullish(),
+  location_of_attack: CountMapSchema.nullish(),
+  offender_demographic: NestedCountMapSchema.nullish(),
+  offender_previously_known_to_agency: CountMapSchema.nullish(),
+  offender_prior_mental_illness: CountMapSchema.nullish(),
+  offender_prior_relationship: CountMapSchema.nullish(),
+  officer_activity: CountMapSchema.nullish(),
+  officer_circumstances_time_of_attack: CountMapSchema.nullish(),
+  officer_death_by_geographic_region: NestedCountMapSchema.nullish(),
+  officer_death_by_month: MonthlyCountMapSchema.nullish(),
+  officer_death_by_time_of_day: NestedCountMapSchema.nullish(),
+  officer_death_by_year: NestedCountMapSchema.nullish(),
+  officer_demographic: NestedCountMapSchema.nullish(),
+  officer_incident_type: CountMapSchema.nullish(),
+  officer_type_of_assignment: CountMapSchema.nullish(),
+  weapons: CountMapSchema.nullish(),
+  weather_conditions: CountMapSchema.nullish(),
+});
+
+/** Validated LEOKA chart, before omitted/null sections are removed from tool output. */
+export type FbiLeokaChartData = z.infer<typeof FbiLeokaChartSchema>;
 
 /**
- * Summarized offense response from /cde/summarized/{scope}/{offense}.
- * Returns monthly rates and actuals for the requested date range.
- * Keys in rates/actuals use the format "MM-YYYY" (e.g. "01-2022").
+ * Summarized rates and actuals use entity labels then MM-YYYY month keys.
+ * Actuals identify the scoped entity; rates may also contain comparison entities.
  */
-export interface FbiSummarizedResponse {
-  /** API metadata: max_data_date, last_refresh_date. */
-  cde_properties?: {
-    max_data_date?: Record<string, string>;
-    last_refresh_date?: Record<string, string>;
-  };
-  offenses: {
-    /** Per-100k rates by location and month. Keys: "{Entity} Offenses" / "{Entity} Clearances"; an agency response also lists its state and "United States", ahead of the agency. */
-    rates: Record<string, Record<string, number>>;
-    /** Absolute offense/clearance counts by month, keyed like `rates` but for the scoped entity only. */
-    actuals: Record<string, Record<string, number>>;
-  };
-  /** Population data by location and month. */
-  populations?: {
-    population?: Record<string, Record<string, number>>;
-  };
-  /** Tooltip metadata (internal CDE display use). */
-  tooltips?: Record<string, unknown>;
-}
+export const FbiSummarizedResponseSchema = z.object({
+  cde_properties: z
+    .object({
+      max_data_date: z.record(z.string(), z.string()).optional(),
+      last_refresh_date: z.record(z.string(), z.string()).optional(),
+    })
+    .nullish(),
+  offenses: z
+    .object({
+      rates: NestedCountMapSchema.nullish(),
+      actuals: NestedCountMapSchema.nullish(),
+    })
+    .nullish(),
+});
+
+/** Summarized data with nullable scoped actuals and rates represented explicitly. */
+export type FbiSummarizedResponse = z.infer<typeof FbiSummarizedResponseSchema>;

@@ -71,7 +71,6 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
     throw ctx.fail(
       'endpoint_decommissioned',
       'The FBI NIBRS breakdown endpoint has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Access NIBRS data at cde.ucr.cjis.gov.',
-      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

@@ -39,7 +39,6 @@ export const fbiGetArson = tool('fbi_get_arson', {
     throw ctx.fail(
       'endpoint_decommissioned',
       'The dedicated arson endpoint (UCR /arson/) has been decommissioned. Use fbi_get_crime_estimates with offense="arson" to get arson data via the CDE summarized API.',
-      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

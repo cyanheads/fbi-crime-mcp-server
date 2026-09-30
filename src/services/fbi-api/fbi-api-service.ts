@@ -11,13 +11,37 @@
  * @module services/fbi-api/fbi-api-service
  */
 
-import type { Context } from '@cyanheads/mcp-ts-core';
+import { type Context, z } from '@cyanheads/mcp-ts-core';
 import type { AppConfig } from '@cyanheads/mcp-ts-core/config';
-import { serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
+import { serializationError, serviceUnavailable } from '@cyanheads/mcp-ts-core/errors';
 import type { StorageService } from '@cyanheads/mcp-ts-core/storage';
 import { fetchWithTimeout, withRetry } from '@cyanheads/mcp-ts-core/utils';
 import type { ServerConfig } from '@/config/server-config.js';
-import type { FbiLeokaChartData, FbiSummarizedResponse } from './types.js';
+import {
+  type FbiLeokaChartData,
+  FbiLeokaChartSchema,
+  type FbiSummarizedResponse,
+  FbiSummarizedResponseSchema,
+} from './types.js';
+
+const LeokaWrapperSchema = z
+  .object({ data: z.object({ chart_data: FbiLeokaChartSchema.nullish() }).nullish() })
+  .nullish();
+const LeokaEnvelopeSchema = z
+  .array(
+    z
+      .object({ leoka_chart_ytd: LeokaWrapperSchema, leoka_chart_monthly: LeokaWrapperSchema })
+      .nullable(),
+  )
+  .nullable();
+
+/** Accept legitimate absence while rejecting malformed non-null upstream records. */
+function unwrapLeoka(value: unknown, period: 'ytd' | 'monthly'): FbiLeokaChartData | null {
+  const parsed = LeokaEnvelopeSchema.safeParse(value);
+  if (!parsed.success)
+    throw serializationError('Malformed FBI LEOKA response: expected chart count records.');
+  return parsed.data?.[0]?.[`leoka_chart_${period}`]?.data?.chart_data ?? null;
+}
 
 export class FbiApiService {
   private readonly cdeBase: string;
@@ -75,29 +99,31 @@ export class FbiApiService {
   // --- LEOKA (Law Enforcement Officers Killed and Assaulted) ---
   // Working CDE endpoints: /leoka/ytd?year={year} and /leoka/monthly?year={year}&month={month}
 
-  async getLeokaYtd(params: { year: number }, ctx: Context): Promise<FbiLeokaChartData> {
+  async getLeokaYtd(params: { year: number }, ctx: Context): Promise<FbiLeokaChartData | null> {
     const url = this.buildUrl(this.cdeBase, '/leoka/ytd', { year: params.year });
     ctx.log.debug('getLeokaYtd', { year: params.year });
-    const data = await this.get<[{ leoka_chart_ytd: { data: { chart_data: FbiLeokaChartData } } }]>(
-      url,
-      ctx,
-    );
-    return data[0].leoka_chart_ytd.data.chart_data;
+    return unwrapLeoka(await this.get<unknown>(url, ctx), 'ytd');
   }
 
   async getLeokaMonthly(
     params: { year: number; month: number },
     ctx: Context,
-  ): Promise<FbiLeokaChartData> {
+  ): Promise<FbiLeokaChartData | null> {
     const url = this.buildUrl(this.cdeBase, '/leoka/monthly', {
       year: params.year,
       month: params.month,
     });
     ctx.log.debug('getLeokaMonthly', { year: params.year, month: params.month });
-    const data = await this.get<
-      [{ leoka_chart_monthly: { data: { chart_data: FbiLeokaChartData } } }]
-    >(url, ctx);
-    return data[0].leoka_chart_monthly.data.chart_data;
+    return unwrapLeoka(await this.get<unknown>(url, ctx), 'monthly');
+  }
+
+  private async getSummarized(url: string, ctx: Context): Promise<FbiSummarizedResponse> {
+    const parsed = FbiSummarizedResponseSchema.safeParse(await this.get<unknown>(url, ctx));
+    if (!parsed.success)
+      throw serializationError(
+        'Malformed FBI summarized response: expected entity/month count records.',
+      );
+    return parsed.data;
   }
 
   // --- Summarized offense data ---
@@ -115,7 +141,7 @@ export class FbiApiService {
       to: params.to,
     });
     ctx.log.debug('getSummarizedNational', { offense, from: params.from, to: params.to });
-    return this.get<FbiSummarizedResponse>(url, ctx);
+    return this.getSummarized(url, ctx);
   }
 
   getSummarizedState(
@@ -130,7 +156,7 @@ export class FbiApiService {
       { from: params.from, to: params.to },
     );
     ctx.log.debug('getSummarizedState', { stateAbbr, offense, from: params.from, to: params.to });
-    return this.get<FbiSummarizedResponse>(url, ctx);
+    return this.getSummarized(url, ctx);
   }
 
   getSummarizedAgency(
@@ -145,7 +171,7 @@ export class FbiApiService {
       { from: params.from, to: params.to },
     );
     ctx.log.debug('getSummarizedAgency', { ori, offense, from: params.from, to: params.to });
-    return this.get<FbiSummarizedResponse>(url, ctx);
+    return this.getSummarized(url, ctx);
   }
 }
 

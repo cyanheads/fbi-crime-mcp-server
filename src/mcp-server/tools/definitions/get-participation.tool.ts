@@ -38,7 +38,6 @@ export const fbiGetParticipation = tool('fbi_get_participation', {
     throw ctx.fail(
       'endpoint_decommissioned',
       'The FBI participation endpoint has been decommissioned. Both the UCR legacy backend and CDE /LATEST/participation/ paths return 404. Access participation data at cde.ucr.cjis.gov.',
-      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

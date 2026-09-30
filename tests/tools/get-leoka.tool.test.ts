@@ -54,10 +54,10 @@ describe('fbiGetLeoka', () => {
     expect(result.period).toBe('ytd');
     expect(result.year).toBe(2022);
     expect(result.totals.total_officers).toBe(58);
-    expect(result.totals.total_officers_felonious).toBe(37);
-    expect(result.totals.total_officers_accidental).toBe(21);
-    expect(result.totals.total_incidents_felonious).toBe(35);
-    expect(result.totals.total_incidents_accidental).toBe(21);
+    expect(result.totals.total_officers_dod).toBe(37);
+    expect(result.totals.total_officers_doi).toBe(21);
+    expect(result.totals.total_incidents_dod).toBe(35);
+    expect(result.totals.total_incidents_doi).toBe(21);
     expect(result.weapons).toEqual({ Handguns: 25, Rifles: 8 });
     expect(result.deaths_by_year).toBeDefined();
     expect(result.deaths_by_region).toBeDefined();
@@ -106,11 +106,11 @@ describe('fbiGetLeoka', () => {
       year: 2022,
       totals: {
         total_officers: 58,
-        total_officers_felonious: 37,
-        total_officers_accidental: 21,
+        total_officers_dod: 37,
+        total_officers_doi: 21,
         total_incidents: 56,
-        total_incidents_felonious: 35,
-        total_incidents_accidental: 21,
+        total_incidents_dod: 35,
+        total_incidents_doi: 21,
       },
     });
     const blocks = fbiGetLeoka.format!(output);
@@ -175,6 +175,13 @@ describe('fbiGetLeoka', () => {
     expect(text).toContain('Deaths by Geographic Region');
     expect(text).toContain('| South | 31 | 30 |');
     expect(text).toContain('| West | 12 | 11 |');
+    const regionRows = text.split('### Deaths by Geographic Region')[1]?.split('\n### ')[0];
+    expect(regionRows?.match(/^\| (South|West|Midwest|Northeast) \|/gm)).toEqual([
+      '| South |',
+      '| West |',
+      '| Midwest |',
+      '| Northeast |',
+    ]);
     expect(text).not.toContain('[object Object]');
     expect(text).not.toContain('NaN');
   });
@@ -189,5 +196,25 @@ describe('fbiGetLeoka', () => {
     const text = (blocks[0] as { text: string }).text;
     expect(text).toContain('2021');
     expect(text).toContain('Year-to-Date');
+  });
+
+  it('orders existing category tables by descending count', () => {
+    const output = fbiGetLeoka.output.parse({
+      period: 'ytd',
+      year: 2023,
+      totals: {},
+      weapons: { Low: 1, High: 4 },
+      officer_activity: { Low: 1, High: 4 },
+      lighting_conditions: { Low: 1, High: 4 },
+    });
+    const text = (fbiGetLeoka.format!(output)[0] as { text: string }).text;
+    for (const heading of [
+      'Weapons Used',
+      'Officer Activity at Time of Incident',
+      'Lighting Conditions',
+    ]) {
+      const section = text.split(`### ${heading}`)[1]?.split('\n### ')[0];
+      expect(section?.match(/^\| (Low|High) \|/gm)).toEqual(['| High |', '| Low |']);
+    }
   });
 });

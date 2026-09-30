@@ -46,7 +46,6 @@ export const fbiListCodeTable = tool('fbi_list_code_table', {
     throw ctx.fail(
       'endpoint_decommissioned',
       'The FBI code table endpoint (UCR /codes/) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Reference code values at cde.ucr.cjis.gov.',
-      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 

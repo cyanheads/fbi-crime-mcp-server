@@ -148,14 +148,10 @@ export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
     });
 
     if (input.scope === 'state' && !input.state_abbr) {
-      throw ctx.fail('scope_param_missing', 'state_abbr is required when scope is "state".', {
-        ...ctx.recoveryFor('scope_param_missing'),
-      });
+      throw ctx.fail('scope_param_missing', 'state_abbr is required when scope is "state".');
     }
     if (input.scope === 'agency' && !input.ori) {
-      throw ctx.fail('scope_param_missing', 'ori is required when scope is "agency".', {
-        ...ctx.recoveryFor('scope_param_missing'),
-      });
+      throw ctx.fail('scope_param_missing', 'ori is required when scope is "agency".');
     }
 
     const from = toApiDate(input.from_year, input.from_month);
@@ -175,17 +171,17 @@ export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
     // Keys are "{Entity} Offenses" / "{Entity} Clearances". `actuals` carries only the
     // scoped entity (the nation, the state, or the agency), while `rates` also lists an
     // agency's state and the nation — so the entity named in `actuals` selects the rates.
-    const offenseRates = data.offenses.rates;
-    const offenseActuals = data.offenses.actuals;
+    const offenseRates = data.offenses?.rates;
+    const offenseActuals = data.offenses?.actuals;
 
-    const entity = Object.keys(offenseActuals)
+    const entity = Object.keys(offenseActuals ?? {})
       .find((k) => k.endsWith(' Offenses'))
       ?.slice(0, -' Offenses'.length);
     const series = (
-      map: Record<string, Record<string, number>>,
+      map: Record<string, Record<string, number | null> | null> | null | undefined,
       kind: 'Offenses' | 'Clearances',
-    ): Record<string, number> =>
-      (entity === undefined ? undefined : map[`${entity} ${kind}`]) ?? {};
+    ): Record<string, number | null> =>
+      (entity === undefined ? undefined : map?.[`${entity} ${kind}`]) ?? {};
 
     const rateData = series(offenseRates, 'Offenses');
     const clearanceRateData = series(offenseRates, 'Clearances');
@@ -195,11 +191,10 @@ export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
     // Collect all month keys and build sorted rows
     const allKeys = new Set([...Object.keys(rateData), ...Object.keys(actualData)]);
 
-    if (allKeys.size === 0) {
+    if (Object.keys(actualData).length === 0) {
       throw ctx.fail(
         'no_data',
         `No data returned for offense="${input.offense}" scope="${input.scope}" from=${from} to=${to}.`,
-        { ...ctx.recoveryFor('no_data') },
       );
     }
 

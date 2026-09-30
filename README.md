@@ -7,7 +7,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-0.1.8-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/fbi-crime-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-2.0.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/fbi-crime-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/fbi-crime-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.0-blueviolet.svg?style=flat-square)](https://bun.sh/)
+[![Version](https://img.shields.io/badge/Version-0.1.8-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/fbi-crime-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-2.1.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/fbi-crime-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/fbi-crime-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.2-blueviolet.svg?style=flat-square)](https://bun.sh/)
 
 </div>
 
@@ -53,9 +53,7 @@ FBI Crime Data Explorer (CDE) data — monthly UCR offense rates and counts by n
 
 ### `fbi_get_crime_estimates` <sub>tool</sub>
 
-- `scope`: `national`, `state` (requires `state_abbr`, 2 letters), or `agency` (requires `ori`, 9 characters)
-- `offense`: one of `violent-crime`, `property-crime`, `robbery`, `burglary`, `larceny`, `motor-vehicle-theft`, `arson`, `aggravated-assault`, `rape`, `homicide`
-- Date range via `from_year`/`from_month` (default January) and `to_year`/`to_month` (default December), years 2000–2030
+- `scope`: `national`, `state` (requires two-letter `state_abbr`), or `agency` (requires nine-character `ori`); `offense`: `violent-crime`, `property-crime`, `robbery`, `burglary`, `larceny`, `motor-vehicle-theft`, `arson`, `aggravated-assault`, `rape`, or `homicide`. Set `from_year`/`from_month` through `to_year`/`to_month` (2000–2030; months default to January and December).
 - Returns per-100k rates and raw actual/clearance counts by month, plus `data_last_updated` when the CDE reports a refresh date
 - Typed errors: `scope_param_missing` (missing `state_abbr`/`ori` for the chosen scope), `no_data`
 
@@ -72,8 +70,12 @@ FBI Crime Data Explorer (CDE) data — monthly UCR offense rates and counts by n
 ### `fbi_get_leoka` <sub>tool</sub>
 
 - `period`: `ytd` (year-to-date) or `monthly` (requires `month`, 1–12); `year` is required (2000–2030)
-- Returns fatality totals (feloniously/accidentally killed, incident counts), plus weapon, officer-activity, lighting-condition, and geographic-region breakdowns when the CDE reports them
-- `deaths_by_year` and `deaths_by_region` are keyed by `Felonious`/`Accidental`
+- `totals` preserves the six fields from `incidents_victim_officer_totals_ytd`: `total_officers`, `total_incidents`, `total_officers_dod`, `total_officers_doi`, `total_incidents_dod`, and `total_incidents_doi`. This CDE YTD block appears in both periods; it is not a combined-fatality count or a requested-month total. The upstream `dod`/`doi` abbreviations have unspecified interpretation.
+- Totals field migration: replace `total_officers_felonious` with `total_officers_dod`, `total_officers_accidental` with `total_officers_doi`, `total_incidents_felonious` with `total_incidents_dod`, and `total_incidents_accidental` with `total_incidents_doi`. The four aliases are removed; values are unchanged.
+- Category-to-count maps: `weapons`, `officer_activity`, `lighting_conditions`, `body_armor_worn`, `location_of_attack`, `offender_previously_known_to_agency`, `offender_prior_mental_illness`, `offender_prior_relationship`, `officer_circumstances_time_of_attack`, `officer_incident_type`, `officer_type_of_assignment`, and `weather_conditions`.
+- `offender_demographic` and `officer_demographic` map demographic dimensions to category counts. `officer_death_by_time_of_day` maps killing types to literal hour keys (including `-1`); `officer_death_by_month` maps killing types to years to month counts, retaining comparison years and zeros.
+- `deaths_by_region` and optional `deaths_by_year` retain explicitly classified killing types such as `Felonious`/`Accidental`. Monthly responses omit the annual series and provide month-specific breakdowns alongside the separate CDE YTD totals block.
+- Structured and text output include every returned category and path. Absent/null sections are omitted, empty maps have no reported entries, null subgroups/counts are unavailable, and zero remains zero.
 - Typed errors: `month_required` (monthly period without `month`), `no_data`
 
 ---
@@ -298,6 +300,8 @@ All configuration is validated at startup via Zod schemas in `src/config/server-
 | `LOGS_DIR` | Directory for log files (Node.js only). | `<project-root>/logs` |
 | `STORAGE_PROVIDER_TYPE` | Storage backend: `in-memory`, `filesystem`, `supabase`, `cloudflare-kv/r2/d1`. | `in-memory` |
 | `OTEL_ENABLED` | Enable [OpenTelemetry instrumentation](https://github.com/cyanheads/mcp-ts-core/tree/main/docs/telemetry). | `false` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP base URL for trace and metric export; does not enable log export. | none |
+| `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` | Explicit OTLP log export endpoint; the Docker image includes the required optional peers. | none |
 
 See [`.env.example`](./.env.example) for the full list of optional overrides.
 
@@ -342,7 +346,7 @@ The Dockerfile defaults to HTTP transport, stateless session mode, and logs to `
 | `src/config` | Server-specific environment variable parsing and validation with Zod. |
 | `src/mcp-server/tools` | Tool definitions (`*.tool.ts`). 12 tools — 3 active via CDE API, 9 decommissioned. |
 | `src/mcp-server/resources` | Resource definitions (`*.resource.ts`). Agency and state overview resources. |
-| `src/services` | FBI API service layer — UCR and CDE clients with shared retry/timeout logic. |
+| `src/services` | FBI CDE API service with response validation and shared retry/timeout logic. |
 | `tests/` | Unit and integration tests mirroring `src/`. |
 
 ## Development guide
@@ -351,7 +355,7 @@ See [`CLAUDE.md`](./CLAUDE.md) for development guidelines and architectural rule
 
 - Handlers throw, framework catches — no `try/catch` in tool logic
 - Use `ctx.log` for request-scoped logging, `ctx.state` for tenant-scoped storage
-- Register new tools and resources via the barrels in `src/mcp-server/*/definitions/index.ts`
+- Register new tools and resources in the arrays passed to `createApp()` in `src/index.ts`
 - Active tools call the CDE API (`/cde/summarized/`, `/cde/leoka/`); decommissioned tools throw `serviceUnavailable` with a recovery hint
 - Wrap FBI API calls: validate raw → normalize to domain type → return output schema; never fabricate missing fields
 

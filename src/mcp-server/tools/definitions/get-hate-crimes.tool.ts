@@ -37,7 +37,6 @@ export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
     throw ctx.fail(
       'endpoint_decommissioned',
       'The FBI hate crimes endpoint (UCR /hc/count/) has been decommissioned. The Cloud Foundry backend (crime-data-api.fr.cloud.gov) no longer exists. Access hate crime data at cde.ucr.cjis.gov.',
-      { ...ctx.recoveryFor('endpoint_decommissioned') },
     );
   },
 
