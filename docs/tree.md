@@ -1,6 +1,6 @@
 # fbi-crime-mcp-server - Directory Structure
 
-Generated on: 2026-09-30 09:16:01
+Generated on: 2026-09-30 09:44:24
 
 ```text
 fbi-crime-mcp-server/
@@ -25,6 +25,7 @@ fbi-crime-mcp-server/
 │   └── settings.json
 ├── changelog/
 │   ├── 0.1.x/
+│   ├── 0.2.x/
 │   └── template.md
 ├── docs/
 │   ├── design.md

@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.2.0](changelog/0.2.x/0.2.0.md) — 2026-09-30 · ⚠️ Breaking
+
+LEOKA preserves raw upstream totals and all thirteen circumstance breakdowns; absent CDE data returns actionable no_data errors.
+
 ## [0.1.8](changelog/0.1.x/0.1.8.md) — 2026-09-21
 
 Agency-scope queries report the agency's own rates, HTTP session mode defaults to stateless however the server is launched, and decommissioned tools return their declared recovery hints. Adopts @cyanheads/mcp-ts-core ^0.13.6.
