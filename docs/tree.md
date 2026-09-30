@@ -1,6 +1,6 @@
 # fbi-crime-mcp-server - Directory Structure
 
-Generated on: 2026-09-22 03:56:09
+Generated on: 2026-09-30 09:16:01
 
 ```text
 fbi-crime-mcp-server/
@@ -127,6 +127,7 @@ fbi-crime-mcp-server/
 │   ├── clean-mcpb.ts
 │   ├── clean.ts
 │   ├── devcheck.ts
+│   ├── install-otel.ts
 │   ├── lint-mcp.ts
 │   ├── lint-packaging.ts
 │   ├── list-skills.ts
@@ -162,11 +163,19 @@ fbi-crime-mcp-server/
 │   │       └── types.ts
 │   └── index.ts
 ├── tests/
+│   ├── fixtures/
+│   │   └── cde/
+│   │       ├── agency.json
+│   │       ├── monthly-2023-6.json
+│   │       ├── state.json
+│   │       ├── unknown-ori.json
+│   │       └── ytd-2023.json
 │   ├── prompts/
 │   ├── resources/
 │   │   ├── agency.resource.test.ts
 │   │   └── state.resource.test.ts
 │   ├── services/
+│   │   ├── cde-contract.test.ts
 │   │   └── fbi-api-service.test.ts
 │   └── tools/
 │       ├── get-agency-offenses.tool.test.ts
