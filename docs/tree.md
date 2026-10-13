@@ -1,6 +1,6 @@
 # fbi-crime-mcp-server - Directory Structure
 
-Generated on: 2026-09-30 09:44:24
+Generated on: 2026-10-13 15:26:46
 
 ```text
 fbi-crime-mcp-server/
@@ -132,6 +132,7 @@ fbi-crime-mcp-server/
 │   ├── lint-mcp.ts
 │   ├── lint-packaging.ts
 │   ├── list-skills.ts
+│   ├── prune-musl-packages.ts
 │   ├── release-github.ts
 │   └── tree.ts
 ├── src/
@@ -146,7 +147,6 @@ fbi-crime-mcp-server/
 │   │   │       └── state.resource.ts
 │   │   └── tools/
 │   │       └── definitions/
-│   │           ├── get-agency-offenses.tool.ts
 │   │           ├── get-agency.tool.ts
 │   │           ├── get-arrests.tool.ts
 │   │           ├── get-arson.tool.ts
@@ -168,6 +168,7 @@ fbi-crime-mcp-server/
 │   │   └── cde/
 │   │       ├── agency.json
 │   │       ├── monthly-2023-6.json
+│   │       ├── national-jun2023.json
 │   │       ├── state.json
 │   │       ├── unknown-ori.json
 │   │       └── ytd-2023.json
@@ -178,19 +179,19 @@ fbi-crime-mcp-server/
 │   ├── services/
 │   │   ├── cde-contract.test.ts
 │   │   └── fbi-api-service.test.ts
-│   └── tools/
-│       ├── get-agency-offenses.tool.test.ts
-│       ├── get-agency.tool.test.ts
-│       ├── get-arrests.tool.test.ts
-│       ├── get-arson.tool.test.ts
-│       ├── get-crime-estimates.tool.test.ts
-│       ├── get-hate-crimes.tool.test.ts
-│       ├── get-human-trafficking.tool.test.ts
-│       ├── get-leoka.tool.test.ts
-│       ├── get-nibrs-breakdown.tool.test.ts
-│       ├── get-participation.tool.test.ts
-│       ├── list-code-table.tool.test.ts
-│       └── search-agencies.tool.test.ts
+│   ├── tools/
+│   │   ├── get-agency.tool.test.ts
+│   │   ├── get-arrests.tool.test.ts
+│   │   ├── get-arson.tool.test.ts
+│   │   ├── get-crime-estimates.tool.test.ts
+│   │   ├── get-hate-crimes.tool.test.ts
+│   │   ├── get-human-trafficking.tool.test.ts
+│   │   ├── get-leoka.tool.test.ts
+│   │   ├── get-nibrs-breakdown.tool.test.ts
+│   │   ├── get-participation.tool.test.ts
+│   │   ├── list-code-table.tool.test.ts
+│   │   └── search-agencies.tool.test.ts
+│   └── discovery.test.ts
 ├── .dockerignore
 ├── .env.example
 ├── .gitattributes

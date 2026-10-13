@@ -7,7 +7,6 @@
 | Name | Description | Key Inputs | Annotations |
 |:-----|:------------|:-----------|:------------|
 | `fbi_get_crime_estimates` | Monthly CDE summarized offense rates and actual counts for the selected entity. | `scope` (national/state/agency), `offense`, `state_abbr` or `ori`, `from_year`/`from_month`, `to_year`/`to_month` | `readOnlyHint` |
-| `fbi_get_agency_offenses` | Same summarized endpoint and entity selection as `fbi_get_crime_estimates`. | Same scope, offense, and monthly range parameters | `readOnlyHint` |
 | `fbi_get_leoka` | Officer fatality trends, raw CDE YTD totals, weapons, circumstances, demographics, and timelines. | `period` (ytd/monthly), `year`, `month` (required for monthly) | `readOnlyHint` |
 | `fbi_search_agencies` | Unavailable: decommissioned UCR agency search. | `state_abbr`, `agency_type`, `city`, `population_group`, `page`, `per_page` (unused) | `readOnlyHint` |
 | `fbi_get_agency` | Unavailable: decommissioned UCR agency profile. | `ori` (unused) | `readOnlyHint` |
@@ -19,14 +18,11 @@
 | `fbi_get_arson` | Unavailable: use `fbi_get_crime_estimates` with `offense="arson"`. | `scope`, `state_abbr`, `since_year`, `until_year` (unused) | `readOnlyHint` |
 | `fbi_list_code_table` | Unavailable: decommissioned UCR code tables. | `table` (unused) | `readOnlyHint` |
 
-Unavailable tools retain their input contracts and throw `endpoint_decommissioned` without making upstream requests.
+Two tools are callable; nine unavailable definitions retain their schemas and disabled reasons in the operator landing page and internal manifest. `disabledTool` omits them from MCP registration, so their stub handlers cannot run through MCP.
 
 ### Resources
 
-| URI Template | Description |
-|:-------------|:------------|
-| `fbi://agency/{ori}` | Unavailable: reading the agency profile returns `ServiceUnavailable`. |
-| `fbi://state/{state_abbr}` | Unavailable: reading state participation returns `ServiceUnavailable`. |
+None registered. The retired agency/state resource definitions remain on disk.
 
 ### Prompts
 
@@ -36,9 +32,11 @@ None — this is a data-oriented server.
 
 ## Overview
 
-`fbi-crime-mcp-server` exposes the surviving FBI Crime Data Explorer (CDE) summarized and LEOKA endpoints. Three tools return data; nine legacy tools and both resources report decommissioned endpoints.
+`fbi-crime-mcp-server` exposes the surviving FBI Crime Data Explorer (CDE) summarized and LEOKA endpoints. Two tools return data; nine legacy tools are disabled and no resources are registered.
 
-The summarized tools return per-100k offense/clearance rates and actual counts by month for national, state, or agency scope. They do not return the former annual adjusted estimates, county agency lists, participation metadata, or separate legacy/revised rape fields.
+The summarized tool returns per-100k offense/clearance rates, actual counts and nullable provider populations/coverage by month for national, state, or agency scope. `entity_name` comes from scoped actuals; `data_last_updated` and `max_data_date` retain provider dates. It does not return the former annual adjusted estimates, county agency lists, agency participation metadata, or separate legacy/revised rape fields.
+
+National requests omit both identifiers, state requests supply only `state_abbr`, and agency requests supply only `ori`. Identifier syntax is ASCII-only, with uppercase normalization and no membership whitelist. Full year/month endpoints must be chronological. YTD LEOKA rejects `month`; monthly requires it. These checks run before fetching.
 
 LEOKA returns fatality trends and circumstances. Both periods include `incidents_victim_officer_totals_ytd`, exposed as `totals` under its six raw keys. Monthly responses include comparison years in `officer_death_by_month` and omit `officer_death_by_year`; cumulative totals remain separate from month-specific breakdowns.
 
@@ -72,7 +70,7 @@ Absent/null sections are omitted. Empty maps, null subgroups/leaves, and zeros r
 
 | Service | Base URL | Used By |
 |:--------|:---------|:--------|
-| `FbiApiService` | `https://api.usa.gov/crime/fbi/cde` | `fbi_get_crime_estimates`, `fbi_get_agency_offenses`, `fbi_get_leoka` |
+| `FbiApiService` | `https://api.usa.gov/crime/fbi/cde` | `fbi_get_crime_estimates`, `fbi_get_leoka` |
 
 The service validates raw response shapes before handlers select data. Legitimate absence becomes `no_data` in the handler; malformed records, invalid JSON, and HTTP failures remain errors with their own classifications.
 
@@ -93,16 +91,16 @@ The service validates raw response shapes before handlers select data. Legitimat
 
 | Noun | API Operations | Tool |
 |:-----|:---------------|:-----|
-| Summarized offense data | National, state, agency monthly rates and actuals | `fbi_get_crime_estimates`, `fbi_get_agency_offenses` |
+| Summarized offense data | National, state, agency monthly rates, actuals, population denominators and coverage | `fbi_get_crime_estimates` |
 | LEOKA | YTD and monthly fatality trends and circumstances | `fbi_get_leoka` |
 
-Legacy agency lookup, NIBRS, arrests, hate crimes, participation, human trafficking, and code-table capabilities are retained only as explicit unavailable contracts.
+Legacy agency lookup, NIBRS, arrests, hate crimes, participation, human trafficking, arson and code-table definitions are retained only as disabled operator records.
 
 ---
 
 ## NIBRS Breakdown Variables
 
-Accepted by the retained input schema; the endpoint is unavailable.
+Retained in the disabled definition's schema; not callable through MCP.
 
 | Dimension | Valid `variable` values |
 |:----------|:----------------------|
@@ -117,8 +115,8 @@ Accepted by the retained input schema; the endpoint is unavailable.
 ### Crime trends for a known agency or state
 
 1. Obtain the agency ORI outside this server, or supply a two-letter state abbreviation.
-2. Call `fbi_get_crime_estimates` or `fbi_get_agency_offenses` with the matching `scope`, `offense`, and monthly range.
-3. Compare entity-matched rates and actuals. Obtain participation context separately from the CDE website.
+2. Call `fbi_get_crime_estimates` with only the identifier required by `scope`, the `offense`, and a chronological monthly range.
+3. Compare entity-matched rates, actuals and provider population/coverage fields. Missing coverage remains unavailable.
 
 ### Officer fatality trends and circumstances
 
@@ -134,14 +132,16 @@ Call `fbi_get_leoka` with `period="ytd"` and `year`, or `period="monthly"`, `yea
 
 **LEOKA preserves full breakdowns.** The same upstream request already supplies demographics, circumstances, and timelines. Typed nested count maps and complete text tables retain that data without extra requests or inferred counts.
 
-**Unavailable contracts remain registered.** Legacy tools return explicit errors with recovery guidance. The dedicated arson tool points to the summarized endpoint through `fbi_get_crime_estimates`.
+**Coverage is provider-only.** Population, participating population and coverage are looked up by the same scoped entity/month as offenses. Missing agency coverage stays null even when comparison coverage exists or agency populations match; denominator-only months do not add rows. No extra request or inferred percentage is needed.
+
+**Retired contracts are disabled.** The HTTP landing page retains operator reasons and schemas without invocation snippets; MCP discovery exposes only working tools. Retired resources are unregistered.
 
 ---
 
 ## Known Limitations
 
 - Registered keys and DEMO_KEY are subject to upstream rate limits.
-- Agency search and participation metadata are unavailable through this server.
+- Agency search and agency participation metadata are unavailable through this server; summarized monthly population/coverage fields are retained when supplied.
 - Missing scoped actuals are not replaced by national comparison data. Available actuals with absent rates retain nullable rates.
 - Null/empty LEOKA envelopes return `no_data`. A monthly request for an unavailable year can instead fail with upstream HTTP 400.
 - LEOKA `dod`/`doi` abbreviations are uninterpreted; totals are not combined-fatality or requested-month counts.
@@ -195,7 +195,7 @@ The CDE `/LATEST/participation/` paths are decommissioned.
 
 ### Pagination
 
-The active summarized and LEOKA endpoints have no server-side paging contract. Legacy `page`/`per_page` inputs remain unused on unavailable tools.
+The active summarized and LEOKA endpoints have no server-side paging contract. Legacy `page`/`per_page` inputs remain only in disabled definitions.
 
 ### Rate limits
 

@@ -1,13 +1,13 @@
 <div align="center">
   <h1>@cyanheads/fbi-crime-mcp-server</h1>
-  <p><b>Exposes the FBI Crime Data Explorer API — UCR crime estimates, NIBRS incident breakdowns, hate crimes, arrests, human trafficking, and agency participation data via MCP. STDIO or Streamable HTTP.</b>
-  <div>12 Tools (3 active via CDE API, 9 decommissioned) • 2 Resources</div>
+  <p><b>Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts by national, state, or agency scope, plus LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.</b>
+  <div>2 Callable Tools • 9 Disabled Tools • 0 Registered Resources</div>
   </p>
 </div>
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/Version-0.2.0-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/fbi-crime-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-2.1.0-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/fbi-crime-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/fbi-crime-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.2-blueviolet.svg?style=flat-square)](https://bun.sh/)
+[![Version](https://img.shields.io/badge/Version-0.2.0-blue.svg?style=flat-square)](./CHANGELOG.md) [![License](https://img.shields.io/badge/License-Apache%202.0-orange.svg?style=flat-square)](./LICENSE) [![Docker](https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white)](https://github.com/users/cyanheads/packages/container/package/fbi-crime-mcp-server) [![MCP SDK](https://img.shields.io/badge/MCP%20SDK-2.3.1-green.svg?style=flat-square)](https://modelcontextprotocol.io/) [![npm](https://img.shields.io/npm/v/@cyanheads/fbi-crime-mcp-server?style=flat-square&logo=npm&logoColor=white)](https://www.npmjs.com/package/@cyanheads/fbi-crime-mcp-server) [![TypeScript](https://img.shields.io/badge/TypeScript-^7.0.2-3178C6.svg?style=flat-square)](https://www.typescriptlang.org/) [![Bun](https://img.shields.io/badge/Bun-v1.4.3-blueviolet.svg?style=flat-square)](https://bun.sh/)
 
 </div>
 
@@ -19,150 +19,60 @@
 
 </div>
 
+<div align="center">
+
+**Public Hosted Server:** [https://fbi-crime.caseyjhand.com/mcp](https://fbi-crime.caseyjhand.com/mcp)
+
+</div>
+
 ---
 
 ## Overview
 
-FBI Crime Data Explorer (CDE) data — monthly UCR offense rates and counts by national, state, or agency scope, plus Law Enforcement Officers Killed and Assaulted (LEOKA) statistics. Query crime trends and officer-safety data from any MCP client; the CDE's legacy UCR endpoints (agency search, NIBRS breakdowns, hate crimes, arrests, human trafficking, participation) have been decommissioned by the FBI, and their tools and resources return an error. Runs as a stdio process or a local Streamable HTTP server.
+FBI Crime Data Explorer (CDE) data — monthly UCR offense rates, counts, population denominators and reporting coverage by national, state, or agency scope, plus Law Enforcement Officers Killed and Assaulted (LEOKA) statistics. Two tools are callable. Nine legacy tools remain visible with disabled reasons on the HTTP operator landing page; they are absent from MCP discovery and cannot be called. No resources are registered. Runs as a stdio process, a local Streamable HTTP server, or the public hosted endpoint above.
 
 ### Tools
 
 | Tool | Description |
 |:---|:---|
 | `fbi_get_crime_estimates` | Monthly UCR offense rates and counts by national, state, or agency scope, from the CDE summarized endpoint |
-| `fbi_get_agency_offenses` | Same CDE summarized endpoint, scoped to a single agency, state, or the national level |
 | `fbi_get_leoka` | Officer fatality, weapon, and circumstance data (LEOKA) by month or year-to-date |
-| `fbi_get_arson` | [UNAVAILABLE] Redirects to `fbi_get_crime_estimates` with `offense="arson"` |
-| `fbi_search_agencies` | [UNAVAILABLE] UCR agency search backend decommissioned |
-| `fbi_get_agency` | [UNAVAILABLE] UCR agency profile backend decommissioned |
-| `fbi_get_arrests` | [UNAVAILABLE] UCR arrests backend decommissioned |
-| `fbi_get_hate_crimes` | [UNAVAILABLE] UCR hate crimes backend decommissioned |
-| `fbi_get_human_trafficking` | [UNAVAILABLE] UCR human trafficking backend decommissioned |
-| `fbi_get_nibrs_breakdown` | [UNAVAILABLE] UCR NIBRS breakdown backend decommissioned |
-| `fbi_get_participation` | [UNAVAILABLE] UCR and CDE participation backends decommissioned |
-| `fbi_list_code_table` | [UNAVAILABLE] UCR code table backend decommissioned |
+| `fbi_get_arson` | [DISABLED] Use `fbi_get_crime_estimates` with `offense="arson"` |
+| `fbi_search_agencies` | [DISABLED] UCR agency search backend decommissioned |
+| `fbi_get_agency` | [DISABLED] UCR agency profile backend decommissioned |
+| `fbi_get_arrests` | [DISABLED] UCR arrests backend decommissioned |
+| `fbi_get_hate_crimes` | [DISABLED] UCR hate crimes backend decommissioned |
+| `fbi_get_human_trafficking` | [DISABLED] UCR human trafficking backend decommissioned |
+| `fbi_get_nibrs_breakdown` | [DISABLED] UCR NIBRS breakdown backend decommissioned |
+| `fbi_get_participation` | [DISABLED] UCR and CDE participation backends decommissioned |
+| `fbi_list_code_table` | [DISABLED] UCR code table backend decommissioned |
 
-### Resources
-
-| Resource | Description |
-|:---|:---|
-| `fbi://agency/{ori}` | [UNAVAILABLE] Agency profile by ORI; UCR backend decommissioned |
-| `fbi://state/{state_abbr}` | [UNAVAILABLE] State participation overview; CDE backend decommissioned |
+The nine unavailable entries above are disabled operator records, not callable tools. Visit [FBI CDE](https://cde.ucr.cjis.gov/) for retired datasets.
 
 ## Capability reference
 
 ### `fbi_get_crime_estimates` <sub>tool</sub>
 
-- `scope`: `national`, `state` (requires two-letter `state_abbr`), or `agency` (requires nine-character `ori`); `offense`: `violent-crime`, `property-crime`, `robbery`, `burglary`, `larceny`, `motor-vehicle-theft`, `arson`, `aggravated-assault`, `rape`, or `homicide`. Set `from_year`/`from_month` through `to_year`/`to_month` (2000–2030; months default to January and December).
-- Returns per-100k rates and raw actual/clearance counts by month, plus `data_last_updated` when the CDE reports a refresh date
-- Typed errors: `scope_param_missing` (missing `state_abbr`/`ori` for the chosen scope), `no_data`
-
----
-
-### `fbi_get_agency_offenses` <sub>tool</sub>
-
-- Same CDE summarized endpoint as `fbi_get_crime_estimates`, scoped by `scope`: `national`, `state` (`state_abbr`), or `agency` (`ori`)
-- Same `offense` enum and `from_year`/`from_month`/`to_year`/`to_month` range (years 2000–2030)
-- Typed errors: `scope_param_missing`, `no_data`
+- `scope`: `national` (no identifiers), `state` (only `state_abbr`), or `agency` (only `ori`). State identifiers require two ASCII letters; ORIs require nine ASCII letters/digits. Case is normalized to uppercase; DC, PR and codes such as `DCMPD0000` are accepted without a membership whitelist.
+- `offense`: `violent-crime`, `property-crime`, `robbery`, `burglary`, `larceny`, `motor-vehicle-theft`, `arson`, `aggravated-assault`, `rape`, or `homicide`. Set `from_year`/`from_month` through `to_year`/`to_month` (2000–2030; months default to January and December). The complete start must be no later than the end.
+- Returns `entity_name`, per-100k rates, raw actual/clearance counts and nullable `population`, `participated_population`, `population_coverage_percent` for each offense month. Coverage is the provider's percentage for that exact entity/month; missing coverage stays null, even when populations are equal or comparison entities report coverage. Participation may be incomplete. Denominator-only months do not create offense rows.
+- `data_last_updated` and `max_data_date` retain provider dates when supplied.
+- Typed errors: `scope_param_missing`, `scope_param_incompatible`, `invalid_date_range`, `no_data`. Invalid identifier grammar is rejected locally; well-formed unknown identifiers can return `no_data`, whose recovery asks to verify the identifier before offense/date availability.
 
 ---
 
 ### `fbi_get_leoka` <sub>tool</sub>
 
-- `period`: `ytd` (year-to-date) or `monthly` (requires `month`, 1–12); `year` is required (2000–2030)
+- `period`: `ytd` (year-to-date; omit `month`) or `monthly` (requires `month`, 1–12); `year` is required (2000–2030)
 - `totals` preserves the six fields from `incidents_victim_officer_totals_ytd`: `total_officers`, `total_incidents`, `total_officers_dod`, `total_officers_doi`, `total_incidents_dod`, and `total_incidents_doi`. This CDE YTD block appears in both periods; it is not a combined-fatality count or a requested-month total. The upstream `dod`/`doi` abbreviations have unspecified interpretation.
 - Totals field migration: replace `total_officers_felonious` with `total_officers_dod`, `total_officers_accidental` with `total_officers_doi`, `total_incidents_felonious` with `total_incidents_dod`, and `total_incidents_accidental` with `total_incidents_doi`. The four aliases are removed; values are unchanged.
 - Category-to-count maps: `weapons`, `officer_activity`, `lighting_conditions`, `body_armor_worn`, `location_of_attack`, `offender_previously_known_to_agency`, `offender_prior_mental_illness`, `offender_prior_relationship`, `officer_circumstances_time_of_attack`, `officer_incident_type`, `officer_type_of_assignment`, and `weather_conditions`.
 - `offender_demographic` and `officer_demographic` map demographic dimensions to category counts. `officer_death_by_time_of_day` maps killing types to literal hour keys (including `-1`); `officer_death_by_month` maps killing types to years to month counts, retaining comparison years and zeros.
 - `deaths_by_region` and optional `deaths_by_year` retain explicitly classified killing types such as `Felonious`/`Accidental`. Monthly responses omit the annual series and provide month-specific breakdowns alongside the separate CDE YTD totals block.
 - Structured and text output include every returned category and path. Absent/null sections are omitted, empty maps have no reported entries, null subgroups/counts are unavailable, and zero remains zero.
-- Typed errors: `month_required` (monthly period without `month`), `no_data`
+- Typed errors: `month_required` (monthly period without `month`), `month_not_applicable` (YTD with `month`), `no_data`
 
 ---
-
-### `fbi_get_arson` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — the dedicated UCR arson endpoint is decommissioned
-- Recovery hint redirects to `fbi_get_crime_estimates` with `offense="arson"`, which serves arson data via the CDE summarized endpoint
-- Input fields (`scope`, `state_abbr`, `since_year`, `until_year`) are accepted but unused
-
----
-
-### `fbi_search_agencies` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — the UCR agency search backend (`crime-data-api.fr.cloud.gov`) is decommissioned
-- Recovery hint points to cde.ucr.cjis.gov or the FBI UCR program
-- Input fields (`state_abbr`, `agency_type`, `city`, `population_group`, `page`, `per_page`) are accepted but unused
-
----
-
-### `fbi_get_agency` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — the UCR agency profile backend is decommissioned, with no CDE replacement identified
-- Recovery hint points to cde.ucr.cjis.gov
-- `ori` input is accepted but unused
-
----
-
-### `fbi_get_arrests` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — the UCR arrests backend is decommissioned
-- Recovery hint points to cde.ucr.cjis.gov or FBI bulk CSV downloads
-- `since_year`/`until_year` inputs are accepted but unused
-
----
-
-### `fbi_get_hate_crimes` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — the UCR hate crimes backend is decommissioned
-- Recovery hint points to cde.ucr.cjis.gov
-- Input fields (`scope`, `state_abbr`, `since_year`, `until_year`, `cross_offense`) are accepted but unused
-
----
-
-### `fbi_get_human_trafficking` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — the UCR human trafficking backend is decommissioned
-- Recovery hint points to cde.ucr.cjis.gov
-- Input fields (`scope`, `state_abbr`, `ori`, `since_year`, `until_year`) are accepted but unused
-
----
-
-### `fbi_get_nibrs_breakdown` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — the UCR NIBRS breakdown backend is decommissioned
-- Recovery hint points to cde.ucr.cjis.gov
-- Input fields (`dimension`, `variable`, `scope`, `state_abbr`, `offense_name`, `since_year`, `until_year`) are accepted but unused
-
----
-
-### `fbi_get_participation` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — both the UCR legacy backend and the CDE `/LATEST/participation/` path are decommissioned (404)
-- Recovery hint points to cde.ucr.cjis.gov
-- Input fields (`scope`, `state_abbr`, `year`, `nibrs_only`, `page`, `per_page`) are accepted but unused
-
----
-
-### `fbi_list_code_table` <sub>tool</sub>
-
-- Always throws `ServiceUnavailable` — the UCR code table backend is decommissioned
-- Recovery hint points to cde.ucr.cjis.gov
-- `table` input (one of 10 code-table names) is accepted but unused
-
----
-
-### `fbi://agency/{ori}` <sub>resource</sub>
-
-- Always throws `ServiceUnavailable` on read — the UCR agency profile backend is decommissioned
-- `ori` is the 9-character ORI (Originating Agency Identifier) code
-
----
-
-### `fbi://state/{state_abbr}` <sub>resource</sub>
-
-- Always throws `ServiceUnavailable` on read — the CDE `/LATEST/participation/state/` path returns 404
-- `state_abbr` is the two-letter US state abbreviation
 
 ## Features
 
@@ -173,15 +83,32 @@ FBI CDE-specific:
 - CDE summarized endpoint (`/cde/summarized/`) for national, state, and per-agency offense rates and counts across 10 offense types
 - CDE LEOKA endpoint (`/cde/leoka/`) for officer fatality, weapon, and circumstance data by month or year-to-date
 - `DEMO_KEY` works without registration (shared, rate-limited pool); a registered api.data.gov key raises throughput
-- 9 of 12 tools and both resources return a `ServiceUnavailable` error — the legacy UCR backend (`crime-data-api.fr.cloud.gov`) was decommissioned; `fbi_get_arson` redirects callers to `fbi_get_crime_estimates`
+- Nine retired tools retain disabled reasons on the HTTP landing page; MCP clients discover only the two callable tools and no resources
 
 Agent-friendly output:
 
-- Typed error reasons (`scope_param_missing`, `no_data`, `month_required`, `endpoint_decommissioned`) each carry a recovery hint naming the next step or the cde.ucr.cjis.gov replacement
-- Sparse upstream fields surface as `null` rather than fabricated zeros, on the rate, clearance, and count fields of `fbi_get_crime_estimates` and `fbi_get_agency_offenses`
-- `data_last_updated` echoes the CDE's own refresh timestamp so agents can reason about freshness
+- Typed error reasons carry recovery hints for scope, date and period corrections, or unavailable data
+- Sparse upstream rates, clearances, counts, populations and coverage surface as `null` rather than fabricated zeros
+- `data_last_updated` and `max_data_date` echo the CDE's own dates
 
 ## Getting started
+
+### Public Hosted Instance
+
+A public instance is available at `https://fbi-crime.caseyjhand.com/mcp` — no installation required. No API key needed; the instance supplies its own. Point any MCP client at it via Streamable HTTP:
+
+```json
+{
+  "mcpServers": {
+    "fbi-crime-mcp-server": {
+      "type": "streamable-http",
+      "url": "https://fbi-crime.caseyjhand.com/mcp"
+    }
+  }
+}
+```
+
+### Self-Hosted / Local
 
 Add the following to your MCP client configuration file. See the [FBI CDE API key registration](https://api.data.gov/signup/) to obtain a key — DEMO_KEY works for exploration but is rate-limited.
 
@@ -344,8 +271,8 @@ The Dockerfile defaults to HTTP transport, stateless session mode, and logs to `
 |:----------|:--------|
 | `src/index.ts` | `createApp()` entry point — registers tools, resources, and inits services. |
 | `src/config` | Server-specific environment variable parsing and validation with Zod. |
-| `src/mcp-server/tools` | Tool definitions (`*.tool.ts`). 12 tools — 3 active via CDE API, 9 decommissioned. |
-| `src/mcp-server/resources` | Resource definitions (`*.resource.ts`). Agency and state overview resources. |
+| `src/mcp-server/tools` | Tool definitions (`*.tool.ts`). 2 callable tools and 9 disabled operator entries. |
+| `src/mcp-server/resources` | Retired agency/state definitions, not registered. |
 | `src/services` | FBI CDE API service with response validation and shared retry/timeout logic. |
 | `tests/` | Unit and integration tests mirroring `src/`. |
 
@@ -356,7 +283,7 @@ See [`CLAUDE.md`](./CLAUDE.md) for development guidelines and architectural rule
 - Handlers throw, framework catches — no `try/catch` in tool logic
 - Use `ctx.log` for request-scoped logging, `ctx.state` for tenant-scoped storage
 - Register new tools and resources in the arrays passed to `createApp()` in `src/index.ts`
-- Active tools call the CDE API (`/cde/summarized/`, `/cde/leoka/`); decommissioned tools throw `serviceUnavailable` with a recovery hint
+- Active tools call the CDE API (`/cde/summarized/`, `/cde/leoka/`); retired definitions are wrapped with `disabledTool` and omitted from MCP registration
 - Wrap FBI API calls: validate raw → normalize to domain type → return output schema; never fabricate missing fields
 
 ## Contributing

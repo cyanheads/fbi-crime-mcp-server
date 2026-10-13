@@ -1,13 +1,12 @@
 # fbi-crime-mcp-server
 
-FBI Crime Data Explorer — UCR (Uniform Crime Reporting) and NIBRS (National Incident-Based Reporting System) crime statistics.
+Historical concept inventory for FBI Crime Data Explorer. The implemented surface is `fbi_get_crime_estimates` (monthly rates, counts, populations and provider coverage) and `fbi_get_leoka`. Nine retired definitions are disabled; no resources are registered. The data categories and tool ideas below are concept references, not available capabilities. See [design.md](./design.md) for the current contracts.
 
 ## API
 
 - **Base**: `https://api.usa.gov/crime/fbi/`
 - **Auth**: API key (free, via api.data.gov registration)
-- **Docs**: https://crime-data-explorer.fr.cloud.gov/pages/docApi
-- **Alt docs**: https://cde.ucr.cjis.gov/LATEST/webapp/#/pages/docApi
+- **CDE**: https://cde.ucr.cjis.gov/
 
 ## Key data
 

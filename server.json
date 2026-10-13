@@ -1,29 +1,25 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.cyanheads/fbi-crime-mcp-server",
-  "description": "FBI Crime Data Explorer — UCR estimates, NIBRS breakdowns, hate crimes, arrests, and agency data.",
+  "description": "FBI Crime Data Explorer — UCR offense rates and counts, plus LEOKA officer-safety statistics.",
   "repository": {
     "url": "https://github.com/cyanheads/fbi-crime-mcp-server",
     "source": "github"
   },
   "version": "0.2.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://fbi-crime.caseyjhand.com/mcp"
+    }
+  ],
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@cyanheads/fbi-crime-mcp-server",
-      "runtimeHint": "node",
+      "runtimeHint": "npx",
       "version": "0.2.0",
-      "packageArguments": [
-        {
-          "type": "positional",
-          "value": "run"
-        },
-        {
-          "type": "positional",
-          "value": "start:stdio"
-        }
-      ],
       "environmentVariables": [
         {
           "name": "FBI_API_KEY",
@@ -47,18 +43,8 @@
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@cyanheads/fbi-crime-mcp-server",
-      "runtimeHint": "node",
+      "runtimeHint": "npx",
       "version": "0.2.0",
-      "packageArguments": [
-        {
-          "type": "positional",
-          "value": "run"
-        },
-        {
-          "type": "positional",
-          "value": "start:http"
-        }
-      ],
       "environmentVariables": [
         {
           "name": "FBI_API_KEY",
@@ -72,6 +58,12 @@
           "format": "string",
           "isRequired": false,
           "default": "127.0.0.1"
+        },
+        {
+          "name": "MCP_TRANSPORT_TYPE",
+          "description": "Selects the HTTP transport.",
+          "format": "string",
+          "value": "http"
         },
         {
           "name": "MCP_HTTP_PORT",
