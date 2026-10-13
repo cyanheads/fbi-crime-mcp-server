@@ -1,6 +1,6 @@
 {
   "name": "@cyanheads/fbi-crime-mcp-server",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts by national, state, or agency scope, plus LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.",
   "type": "module",
   "main": "dist/index.js",
