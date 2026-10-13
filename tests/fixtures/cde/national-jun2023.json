@@ -1,0 +1,27 @@
+{
+  "offenses": {
+    "rates": {
+      "United States Offenses": { "06-2023": 5.74 },
+      "United States Clearances": { "06-2023": 1.63 }
+    },
+    "actuals": {
+      "United States Offenses": { "06-2023": 18641 },
+      "United States Clearances": { "06-2023": 5284 }
+    }
+  },
+  "tooltips": {
+    "leftYAxisHeaders": {
+      "yAxisHeaderRates": "Offenses per 100,000 people",
+      "yAxisHeaderActual": "Offenses"
+    },
+    "Percent of Population Coverage": { "United States": { "06-2023": 95.95 } }
+  },
+  "populations": {
+    "population": { "United States": { "06-2023": 338357687 } },
+    "participated_population": { "United States": { "06-2023": 324648689 } }
+  },
+  "cde_properties": {
+    "max_data_date": { "UCR": "09/2026" },
+    "last_refresh_date": { "UCR": "09/15/2026" }
+  }
+}

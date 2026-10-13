@@ -158,6 +158,9 @@ describe('fbiGetCrimeEstimates', () => {
         clearance_rate_per_100k: 15.62,
         actual_count: 9,
         clearance_count: 2,
+        population: null,
+        participated_population: null,
+        population_coverage_percent: null,
       },
     ]);
   });
@@ -183,6 +186,9 @@ describe('fbiGetCrimeEstimates', () => {
         clearance_rate_per_100k: 2.7,
         actual_count: 4208,
         clearance_count: 1042,
+        population: null,
+        participated_population: null,
+        population_coverage_percent: null,
       },
     ]);
   });
@@ -235,6 +241,7 @@ describe('fbiGetCrimeEstimates', () => {
       offense: 'violent-crime',
       state_abbr: 'CA',
       from: '01-2022',
+      entity_name: 'California',
       to: '01-2022',
       months: [
         {
@@ -244,6 +251,9 @@ describe('fbiGetCrimeEstimates', () => {
           clearance_rate_per_100k: 100.0,
           actual_count: 17500,
           clearance_count: 4200,
+          population: null,
+          participated_population: null,
+          population_coverage_percent: null,
         },
       ],
       total_months: 1,
@@ -262,8 +272,17 @@ describe('fbiGetCrimeEstimates', () => {
       scope: 'national',
       offense: 'robbery',
       from: '01-2022',
+      entity_name: 'United States',
       to: '01-2022',
-      months: [{ year: 2022, month: 1 }],
+      months: [
+        {
+          year: 2022,
+          month: 1,
+          population: null,
+          participated_population: null,
+          population_coverage_percent: null,
+        },
+      ],
       total_months: 1,
     });
     const blocks = fbiGetCrimeEstimates.format!(output);

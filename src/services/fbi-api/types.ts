@@ -81,6 +81,17 @@ export type FbiLeokaChartData = z.infer<typeof FbiLeokaChartSchema>;
  * Actuals identify the scoped entity; rates may also contain comparison entities.
  */
 export const FbiSummarizedResponseSchema = z.object({
+  populations: z
+    .object({
+      population: NestedCountMapSchema.nullish(),
+      participated_population: NestedCountMapSchema.nullish(),
+    })
+    .nullish(),
+  tooltips: z
+    .object({
+      'Percent of Population Coverage': NestedCountMapSchema.nullish(),
+    })
+    .nullish(),
   cde_properties: z
     .object({
       max_data_date: z.record(z.string(), z.string()).optional(),

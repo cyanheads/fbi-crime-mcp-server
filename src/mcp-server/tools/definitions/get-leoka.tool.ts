@@ -97,6 +97,12 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
 
   errors: [
     {
+      reason: 'month_not_applicable',
+      code: JsonRpcErrorCode.ValidationError,
+      when: 'period is "ytd" but a month was supplied.',
+      recovery: 'Omit month for YTD data, or choose period "monthly" to apply the month.',
+    },
+    {
       reason: 'month_required',
       code: JsonRpcErrorCode.ValidationError,
       when: 'period is "monthly" but the month parameter was not provided.',
@@ -129,7 +135,7 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
       .min(1)
       .max(12)
       .optional()
-      .describe('Month number (1–12). Required when period is "monthly".'),
+      .describe('Month number (1–12). Required for monthly; must be omitted for YTD.'),
   }),
 
   output: z.object({
@@ -201,6 +207,9 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
 
     if (input.period === 'monthly' && input.month === undefined) {
       throw ctx.fail('month_required', 'month is required when period is "monthly".');
+    }
+    if (input.period === 'ytd' && input.month !== undefined) {
+      throw ctx.fail('month_not_applicable', 'month is not applicable when period is "ytd".');
     }
 
     const svc = getFbiApiService();

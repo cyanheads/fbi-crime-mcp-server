@@ -1,17 +1,13 @@
 #!/usr/bin/env node
 /**
  * @fileoverview fbi-crime-mcp-server MCP server entry point.
- * Exposes the FBI Crime Data Explorer API via MCP tools and resources.
+ * Exposes two FBI CDE tools and retains nine disabled operator definitions.
  * @module index
  */
 
-import { createApp } from '@cyanheads/mcp-ts-core';
+import { createApp, disabledTool } from '@cyanheads/mcp-ts-core';
 import { getServerConfig } from './config/server-config.js';
-// Resource definitions
-import { agencyResource } from './mcp-server/resources/definitions/agency.resource.js';
-import { stateResource } from './mcp-server/resources/definitions/state.resource.js';
 import { fbiGetAgency } from './mcp-server/tools/definitions/get-agency.tool.js';
-import { fbiGetAgencyOffenses } from './mcp-server/tools/definitions/get-agency-offenses.tool.js';
 import { fbiGetArrests } from './mcp-server/tools/definitions/get-arrests.tool.js';
 import { fbiGetArson } from './mcp-server/tools/definitions/get-arson.tool.js';
 import { fbiGetCrimeEstimates } from './mcp-server/tools/definitions/get-crime-estimates.tool.js';
@@ -30,27 +26,44 @@ await createApp({
   title: 'fbi-crime-mcp-server',
   sessionMode: 'stateless',
   tools: [
-    fbiListCodeTable,
-    fbiSearchAgencies,
-    fbiGetAgency,
-    fbiGetParticipation,
+    disabledTool(fbiListCodeTable, {
+      reason: 'UCR code-table endpoint retired. Consult https://cde.ucr.cjis.gov/.',
+    }),
+    disabledTool(fbiSearchAgencies, {
+      reason: 'UCR agency-search endpoint retired. Consult https://cde.ucr.cjis.gov/.',
+    }),
+    disabledTool(fbiGetAgency, {
+      reason: 'UCR agency-profile endpoint retired. Consult https://cde.ucr.cjis.gov/.',
+    }),
+    disabledTool(fbiGetParticipation, {
+      reason: 'UCR/CDE participation endpoints retired. Consult https://cde.ucr.cjis.gov/.',
+    }),
     fbiGetCrimeEstimates,
-    fbiGetAgencyOffenses,
-    fbiGetNibrsBreakdown,
-    fbiGetArrests,
-    fbiGetHateCrimes,
-    fbiGetHumanTrafficking,
+    disabledTool(fbiGetNibrsBreakdown, {
+      reason: 'UCR NIBRS endpoint retired. Consult https://cde.ucr.cjis.gov/.',
+    }),
+    disabledTool(fbiGetArrests, {
+      reason: 'UCR arrests endpoint retired. Consult https://cde.ucr.cjis.gov/.',
+    }),
+    disabledTool(fbiGetHateCrimes, {
+      reason: 'UCR hate-crimes endpoint retired. Consult https://cde.ucr.cjis.gov/.',
+    }),
+    disabledTool(fbiGetHumanTrafficking, {
+      reason: 'UCR human-trafficking endpoint retired. Consult https://cde.ucr.cjis.gov/.',
+    }),
     fbiGetLeoka,
-    fbiGetArson,
+    disabledTool(fbiGetArson, {
+      reason:
+        'UCR arson endpoint retired. Use fbi_get_crime_estimates with offense="arson", or consult https://cde.ucr.cjis.gov/.',
+    }),
   ],
-  resources: [agencyResource, stateResource],
+  resources: [],
   prompts: [],
   instructions:
     'FBI Crime Data Explorer MCP server (post-UCR decommission). Only CDE summarized and LEOKA endpoints are active.\n' +
-    '- Use fbi_get_crime_estimates for national, state, or agency-level offense trends (per-100k rates and counts by month)\n' +
-    '- Use fbi_get_agency_offenses for agency-scoped offense data when the ORI is already known\n' +
-    '- Use fbi_get_leoka for officer fatality, weapon, and circumstance data\n' +
-    '- All other tools (participation, agency search, code tables, NIBRS, arrests, hate crimes, arson, human trafficking) are decommissioned — they return errors; consult cde.ucr.cjis.gov for those datasets',
+    '- Use fbi_get_crime_estimates for monthly national, state or agency offense rates/counts and provider populations/coverage. National omits identifiers; state uses only state_abbr; agency uses only ori. Coverage may be null or incomplete.\n' +
+    '- Use fbi_get_leoka for officer fatality, weapon and circumstance data. YTD omits month; monthly requires month.\n' +
+    '- Two tools are callable. Nine retired tools remain disabled on the operator landing page; no resources are registered. Consult https://cde.ucr.cjis.gov/ for other datasets.',
   setup(core) {
     const serverConfig = getServerConfig();
     initFbiApiService(core.config, core.storage, serverConfig);

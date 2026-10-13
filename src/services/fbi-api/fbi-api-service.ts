@@ -74,8 +74,7 @@ export class FbiApiService {
   private get<T>(url: string, ctx: Context): Promise<T> {
     return withRetry(
       async () => {
-        // Log the URL without its api_key query param.
-        ctx.log.debug('FBI CDE API request', { url: url.split('?')[0] });
+        ctx.log.debug('FBI CDE API request', { endpoint: new URL(url).pathname });
         const response = await fetchWithTimeout(url, this.timeoutMs, ctx, {
           signal: ctx.signal,
         });
