@@ -29,7 +29,7 @@
 
 ## Overview
 
-FBI Crime Data Explorer (CDE) data — monthly UCR offense rates, counts, population denominators and reporting coverage by national, state, or agency scope, plus Law Enforcement Officers Killed and Assaulted (LEOKA) statistics. Two tools are callable. Nine legacy tools remain visible with disabled reasons on the HTTP operator landing page; they are absent from MCP discovery and cannot be called. No resources are registered. Runs as a stdio process, a local Streamable HTTP server, or the public hosted endpoint above.
+US crime statistics from the FBI Crime Data Explorer: monthly offense rates and counts with population and reporting coverage at the national, state, or agency level, plus statistics on law enforcement officers killed and assaulted (LEOKA).
 
 ### Tools
 
@@ -53,23 +53,19 @@ The nine unavailable entries above are disabled operator records, not callable t
 
 ### `fbi_get_crime_estimates` <sub>tool</sub>
 
-- `scope`: `national` (no identifiers), `state` (only `state_abbr`), or `agency` (only `ori`). State identifiers require two ASCII letters; ORIs require nine ASCII letters/digits. Case is normalized to uppercase; DC, PR and codes such as `DCMPD0000` are accepted without a membership whitelist.
-- `offense`: `violent-crime`, `property-crime`, `robbery`, `burglary`, `larceny`, `motor-vehicle-theft`, `arson`, `aggravated-assault`, `rape`, or `homicide`. Set `from_year`/`from_month` through `to_year`/`to_month` (2000–2030; months default to January and December). The complete start must be no later than the end.
-- Returns `entity_name`, per-100k rates, raw actual/clearance counts and nullable `population`, `participated_population`, `population_coverage_percent` for each offense month. Coverage is the provider's percentage for that exact entity/month; missing coverage stays null, even when populations are equal or comparison entities report coverage. Participation may be incomplete. Denominator-only months do not create offense rows.
-- `data_last_updated` and `max_data_date` retain provider dates when supplied.
-- Typed errors: `scope_param_missing`, `scope_param_incompatible`, `invalid_date_range`, `no_data`. Invalid identifier grammar is rejected locally; well-formed unknown identifiers can return `no_data`, whose recovery asks to verify the identifier before offense/date availability.
+- `scope`: `national` (no identifiers), `state` (only `state_abbr`, two letters), or `agency` (only `ori`, nine letters/digits). Case is normalized to uppercase.
+- `offense`: `violent-crime`, `property-crime`, `robbery`, `burglary`, `larceny`, `motor-vehicle-theft`, `arson`, `aggravated-assault`, `rape`, or `homicide`. Date range runs `from_year`/`from_month` through `to_year`/`to_month` (2000–2030; months default to January and December), and the start must not be later than the end.
+- Returns `entity_name`, per-100k rates, actual/clearance counts, and nullable `population`, `participated_population`, and `population_coverage_percent` for each offense month, plus `data_last_updated` and `max_data_date` when the provider supplies them.
+- Typed errors: `scope_param_missing`, `scope_param_incompatible`, `invalid_date_range`, `no_data` (also returned for a well-formed identifier the provider doesn't know).
 
 ---
 
 ### `fbi_get_leoka` <sub>tool</sub>
 
 - `period`: `ytd` (year-to-date; omit `month`) or `monthly` (requires `month`, 1–12); `year` is required (2000–2030)
-- `totals` preserves the six fields from `incidents_victim_officer_totals_ytd`: `total_officers`, `total_incidents`, `total_officers_dod`, `total_officers_doi`, `total_incidents_dod`, and `total_incidents_doi`. This CDE YTD block appears in both periods; it is not a combined-fatality count or a requested-month total. The upstream `dod`/`doi` abbreviations have unspecified interpretation.
-- Totals field migration: replace `total_officers_felonious` with `total_officers_dod`, `total_officers_accidental` with `total_officers_doi`, `total_incidents_felonious` with `total_incidents_dod`, and `total_incidents_accidental` with `total_incidents_doi`. The four aliases are removed; values are unchanged.
-- Category-to-count maps: `weapons`, `officer_activity`, `lighting_conditions`, `body_armor_worn`, `location_of_attack`, `offender_previously_known_to_agency`, `offender_prior_mental_illness`, `offender_prior_relationship`, `officer_circumstances_time_of_attack`, `officer_incident_type`, `officer_type_of_assignment`, and `weather_conditions`.
-- `offender_demographic` and `officer_demographic` map demographic dimensions to category counts. `officer_death_by_time_of_day` maps killing types to literal hour keys (including `-1`); `officer_death_by_month` maps killing types to years to month counts, retaining comparison years and zeros.
-- `deaths_by_region` and optional `deaths_by_year` retain explicitly classified killing types such as `Felonious`/`Accidental`. Monthly responses omit the annual series and provide month-specific breakdowns alongside the separate CDE YTD totals block.
-- Structured and text output include every returned category and path. Absent/null sections are omitted, empty maps have no reported entries, null subgroups/counts are unavailable, and zero remains zero.
+- `totals` carries `total_officers`, `total_incidents`, `total_officers_dod`, `total_officers_doi`, `total_incidents_dod`, and `total_incidents_doi` from the CDE year-to-date block. It appears for both periods and is not a requested-month total. The upstream does not define `dod`/`doi`; they replace the removed `total_*_felonious` and `total_*_accidental` fields with the same values.
+- Category-to-count maps: `weapons`, `officer_activity`, `lighting_conditions`, `body_armor_worn`, `location_of_attack`, `offender_previously_known_to_agency`, `offender_prior_mental_illness`, `offender_prior_relationship`, `officer_circumstances_time_of_attack`, `officer_incident_type`, `officer_type_of_assignment`, `weather_conditions`, `offender_demographic`, `officer_demographic`, `officer_death_by_time_of_day`, and `officer_death_by_month`.
+- `deaths_by_region` and optional `deaths_by_year` break out killing types such as `Felonious`/`Accidental`; monthly responses omit the annual series. Absent sections are omitted, null counts mean unavailable, and zero stays zero.
 - Typed errors: `month_required` (monthly period without `month`), `month_not_applicable` (YTD with `month`), `no_data`
 
 ---
