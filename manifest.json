@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "fbi-crime-mcp-server",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts, hate crime, arrest, and NIBRS breakdowns by national, state, or agency scope, agency ORI search, and LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.",
   "author": {
     "name": "cyanheads"
