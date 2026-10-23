@@ -78,7 +78,9 @@ export type FbiLeokaChartData = z.infer<typeof FbiLeokaChartSchema>;
 
 /**
  * Summarized rates and actuals use entity labels then MM-YYYY month keys.
- * Actuals identify the scoped entity; rates may also contain comparison entities.
+ * Actuals identify the scoped entity. Rates, populations, and the coverage tooltip also carry
+ * comparison entities ahead of it (an agency's state and the United States, a state's United
+ * States), with rates per 100,000 participating population and no comparison actuals.
  */
 export const FbiSummarizedResponseSchema = z.object({
   populations: z
@@ -108,3 +110,117 @@ export const FbiSummarizedResponseSchema = z.object({
 
 /** Summarized data with nullable scoped actuals and rates represented explicitly. */
 export type FbiSummarizedResponse = z.infer<typeof FbiSummarizedResponseSchema>;
+
+/**
+ * Scope and MM-YYYY window for a CDE `{endpoint}/{scope}/{selector}` request. The identifier is
+ * sent as given, so callers pass it uppercased.
+ */
+export type CdeScopedWindow = { from: string; to: string } & (
+  | { scope: 'national' }
+  | { scope: 'state'; stateAbbr: string }
+  | { scope: 'agency'; ori: string }
+);
+
+/** `last_refresh_date` / `max_data_date` maps CDE keys by source system (`UCR`). */
+const CdeDateMapSchema = z.record(z.string(), z.string());
+
+/** The `cde_properties` envelope arrest and NIBRS totals carry. */
+const CdePropertiesSchema = z
+  .object({
+    max_data_date: CdeDateMapSchema.nullish(),
+    last_refresh_date: CdeDateMapSchema.nullish(),
+  })
+  .nullish();
+
+/**
+ * `GET /hate-crime/{scope}/{bias}?type=totals`: category counts summed over the window. Every
+ * captured payload carries the same dimensions at every scope, bias, and year (286 cells), so a
+ * missing or null dimension is malformed. An unknown ORI or bias code returns the same shape with
+ * every count zero.
+ */
+export const FbiHateCrimeTotalsSchema = z.object({
+  incident_section: z.object({ bias: CountMapSchema, bias_category: CountMapSchema }),
+  bias_section: z.object({
+    offense_type: CountMapSchema,
+    location_type: CountMapSchema,
+    offender_race: CountMapSchema,
+    offender_ethnicity: CountMapSchema,
+    judicial_district: CountMapSchema,
+  }),
+  last_refresh_date: CdeDateMapSchema.nullish(),
+});
+
+export type FbiHateCrimeTotals = z.infer<typeof FbiHateCrimeTotalsSchema>;
+
+/**
+ * `GET /arrest/{scope}/{offense}?type=totals`: seven category groups summed over the window (175
+ * cells in every captured payload). The demographic groups do not sum to the offense total. An
+ * unknown ORI or offense code returns the same shape with every count zero.
+ */
+export const FbiArrestTotalsSchema = z.object({
+  'Offense Name': CountMapSchema,
+  'Offense Category': CountMapSchema,
+  'Offense Breakdown': CountMapSchema,
+  'Arrestee Sex': CountMapSchema,
+  'Arrestee Race': CountMapSchema,
+  'Male Arrests By Age': CountMapSchema,
+  'Female Arrests By Age': CountMapSchema,
+  cde_properties: CdePropertiesSchema,
+});
+
+export type FbiArrestTotals = z.infer<typeof FbiArrestTotalsSchema>;
+
+/**
+ * `GET /nibrs/{scope}/{offense}?type=totals`: victim, offender, and offense category counts summed
+ * over the window (261 cells in every captured payload; dimensions do not sum to one total). An
+ * unknown ORI or offense code, a window with no NIBRS data, or an offense with no reported
+ * incidents in the window returns the same shape with every count null.
+ */
+export const FbiNibrsTotalsSchema = z.object({
+  victim: z.object({
+    age: CountMapSchema,
+    sex: CountMapSchema,
+    race: CountMapSchema,
+    location: CountMapSchema,
+    ethnicity: CountMapSchema,
+    relationship: CountMapSchema,
+  }),
+  offender: z.object({
+    age: CountMapSchema,
+    sex: CountMapSchema,
+    race: CountMapSchema,
+    ethnicity: CountMapSchema,
+  }),
+  offense: z.object({ weapons: CountMapSchema, related_offenses: CountMapSchema }),
+  cde_properties: CdePropertiesSchema,
+});
+
+export type FbiNibrsTotals = z.infer<typeof FbiNibrsTotalsSchema>;
+
+/**
+ * One agency in the CDE state directory. Every captured record carries these fields;
+ * `nibrs_start_date` is null exactly when `is_nibrs` is false. Coordinates and the
+ * per-state constants (`state_abbr`, `state_name`) are dropped.
+ */
+export const FbiDirectoryAgencySchema = z.object({
+  ori: z.string(),
+  agency_name: z.string(),
+  agency_type_name: z.string(),
+  /** Comma-separated county list, e.g. `BEXAR, MEDINA`; `NOT SPECIFIED` for statewide agencies. */
+  counties: z.string(),
+  is_nibrs: z.boolean(),
+  nibrs_start_date: z.string().nullish(),
+});
+
+export type FbiDirectoryAgency = z.infer<typeof FbiDirectoryAgencySchema>;
+
+/**
+ * `GET /agency/byStateAbbr/{STATE}` answers HTTP 200 in two shapes: agencies grouped
+ * under county-string keys (a multi-county agency appears once, under its combined key),
+ * or, for a code CDE has no directory for (including any lowercase code), an envelope
+ * whose `counties` is null.
+ */
+export const FbiAgencyDirectoryResponseSchema = z.union([
+  z.object({ cde_agencies_query: z.object({ counties: z.null() }) }),
+  z.record(z.string(), z.array(FbiDirectoryAgencySchema)),
+]);

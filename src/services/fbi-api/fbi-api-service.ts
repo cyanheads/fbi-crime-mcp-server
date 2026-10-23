@@ -3,11 +3,12 @@
  * Wraps the CDE base URL under a single init/accessor pattern.
  * All methods accept a Context for correlated logging and respect ctx.signal.
  *
- * Backend status (verified 2026-05-25):
+ * Backend status (verified 2026-05-25; agency directory, hate crime, arrest, NIBRS 2026-10-22):
  * - UCR base (api.usa.gov/crime/fbi/ucr): DECOMMISSIONED — Cloud Foundry route removed.
  * - CDE base (api.usa.gov/crime/fbi/cde): PARTIALLY ACTIVE.
- *   Working: /leoka/ytd, /leoka/monthly, /summarized/{scope}/{offense}
- *   Dead: agencies, estimates, participation, nibrs, arrests, hate crimes, human trafficking, arson, code tables
+ *   Working: /leoka/ytd, /leoka/monthly, /summarized/{scope}/{offense}, /agency/byStateAbbr/{state},
+ *            /hate-crime/{scope}/{bias}, /arrest/{scope}/{offense}, /nibrs/{scope}/{offense}
+ *   Dead: agency profiles, estimates, participation, human trafficking, arson, code tables
  * @module services/fbi-api/fbi-api-service
  */
 
@@ -18,11 +19,27 @@ import type { StorageService } from '@cyanheads/mcp-ts-core/storage';
 import { fetchWithTimeout, withRetry } from '@cyanheads/mcp-ts-core/utils';
 import type { ServerConfig } from '@/config/server-config.js';
 import {
+  type CdeScopedWindow,
+  FbiAgencyDirectoryResponseSchema,
+  type FbiArrestTotals,
+  FbiArrestTotalsSchema,
+  type FbiDirectoryAgency,
+  type FbiHateCrimeTotals,
+  FbiHateCrimeTotalsSchema,
   type FbiLeokaChartData,
   FbiLeokaChartSchema,
+  type FbiNibrsTotals,
+  FbiNibrsTotalsSchema,
   type FbiSummarizedResponse,
   FbiSummarizedResponseSchema,
 } from './types.js';
+
+/** The scope path segment CDE expects: `national`, `state/{ABBR}`, or `agency/{ORI}`. */
+function scopePath(window: CdeScopedWindow): string {
+  if (window.scope === 'state') return `state/${encodeURIComponent(window.stateAbbr)}`;
+  if (window.scope === 'agency') return `agency/${encodeURIComponent(window.ori)}`;
+  return 'national';
+}
 
 const LeokaWrapperSchema = z
   .object({ data: z.object({ chart_data: FbiLeokaChartSchema.nullish() }).nullish() })
@@ -93,6 +110,28 @@ export class FbiApiService {
         signal: ctx.signal,
       },
     );
+  }
+
+  // --- Agency directory ---
+  // Working CDE endpoint: /agency/byStateAbbr/{STATE} — every agency in one state in one
+  // response. It ignores county_name and data_year, so callers filter the result.
+
+  /**
+   * Fetch one state's agency directory, flattened from its county-keyed groups.
+   * Returns null when CDE has no directory for the code (HTTP 200 with `counties: null`).
+   * CDE reads lowercase codes as unknown, so pass the code uppercased.
+   * @throws SerializationError when the response matches neither documented shape.
+   */
+  async getAgencyDirectory(stateAbbr: string, ctx: Context): Promise<FbiDirectoryAgency[] | null> {
+    const url = this.buildUrl(this.cdeBase, `/agency/byStateAbbr/${encodeURIComponent(stateAbbr)}`);
+    ctx.log.debug('getAgencyDirectory', { stateAbbr });
+    const parsed = FbiAgencyDirectoryResponseSchema.safeParse(await this.get<unknown>(url, ctx));
+    if (!parsed.success)
+      throw serializationError(
+        'Malformed FBI agency directory response: expected county-keyed agency records.',
+      );
+    if ('cde_agencies_query' in parsed.data) return null;
+    return Object.values(parsed.data).flat();
   }
 
   // --- LEOKA (Law Enforcement Officers Killed and Assaulted) ---
@@ -171,6 +210,60 @@ export class FbiApiService {
     );
     ctx.log.debug('getSummarizedAgency', { ori, offense, from: params.from, to: params.to });
     return this.getSummarized(url, ctx);
+  }
+
+  // --- Category totals ---
+  // Working CDE endpoints: /{hate-crime|arrest|nibrs}/{national|state/{state}|agency/{ori}}/{selector}
+  //   ?type=totals&from=MM-YYYY&to=MM-YYYY — category counts summed over the window.
+  // CDE answers an unknown identifier or selector with HTTP 200 — zeros for hate-crime and arrest,
+  // nulls for nibrs — so callers validate both.
+
+  /**
+   * Fetch one `type=totals` breakdown and validate it against the endpoint's schema.
+   * @throws SerializationError when the payload does not match `schema`.
+   */
+  private async getTotals<T>(
+    endpoint: string,
+    schema: z.ZodType<T>,
+    window: CdeScopedWindow,
+    selector: string,
+    ctx: Context,
+  ): Promise<T> {
+    const url = this.buildUrl(
+      this.cdeBase,
+      `/${endpoint}/${scopePath(window)}/${encodeURIComponent(selector)}`,
+      { type: 'totals', from: window.from, to: window.to },
+    );
+    ctx.log.debug('getTotals', { endpoint, scope: window.scope, selector, from: window.from });
+    const parsed = schema.safeParse(await this.get<unknown>(url, ctx));
+    if (!parsed.success)
+      throw serializationError(
+        `Malformed FBI ${endpoint} response: expected every category group as a category-to-count map.`,
+      );
+    return parsed.data;
+  }
+
+  /** Hate crime incident and offense category totals; `bias` is `all` or a CDE bias code. */
+  getHateCrimeTotals(
+    window: CdeScopedWindow,
+    bias: string,
+    ctx: Context,
+  ): Promise<FbiHateCrimeTotals> {
+    return this.getTotals('hate-crime', FbiHateCrimeTotalsSchema, window, bias, ctx);
+  }
+
+  /** Arrest category totals; `offense` is `all` or a CDE numeric arrest offense code. */
+  getArrestTotals(
+    window: CdeScopedWindow,
+    offense: string,
+    ctx: Context,
+  ): Promise<FbiArrestTotals> {
+    return this.getTotals('arrest', FbiArrestTotalsSchema, window, offense, ctx);
+  }
+
+  /** NIBRS victim, offender, and offense category totals for one CDE NIBRS offense code. */
+  getNibrsTotals(window: CdeScopedWindow, offense: string, ctx: Context): Promise<FbiNibrsTotals> {
+    return this.getTotals('nibrs', FbiNibrsTotalsSchema, window, offense, ctx);
   }
 }
 

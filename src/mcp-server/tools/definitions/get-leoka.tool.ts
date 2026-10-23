@@ -7,6 +7,7 @@
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
+import { assertYearsNotFuture } from '@/mcp-server/tools/cde-scoped-range.js';
 import { getFbiApiService } from '@/services/fbi-api/fbi-api-service.js';
 import {
   CountMapSchema,
@@ -15,7 +16,66 @@ import {
   NestedCountMapSchema,
 } from '@/services/fbi-api/types.js';
 
+/** First year CDE serves LEOKA data. */
+const FLOOR_YEAR = 2020;
+
+/** Month keys CDE uses in officer_death_by_month, in calendar order. */
+const MONTH_KEYS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
 type CountTree = { [key: string]: number | null | CountTree };
+type MonthlyCounts = z.infer<typeof MonthlyCountMapSchema>;
+
+/** Keep the month keys `keep` accepts under every killing type and year; null groups stay null. */
+function filterMonths(series: MonthlyCounts, keep: (monthKey: string) => boolean): MonthlyCounts {
+  return Object.fromEntries(
+    Object.entries(series).map(([type, years]) => [
+      type,
+      years === null
+        ? null
+        : Object.fromEntries(
+            Object.entries(years).map(([year, months]) => [
+              year,
+              months === null
+                ? null
+                : Object.fromEntries(Object.entries(months).filter(([month]) => keep(month))),
+            ]),
+          ),
+    ]),
+  );
+}
+
+/**
+ * CDE zero-fills officer_death_by_month past what a response covers: a monthly response fills
+ * every month but the requested one, and a current-year YTD response fills the months after the
+ * current one in both years. Keep only covered months, so a fill zero never reads as a count.
+ * `month` is the requested month of a monthly response, undefined for YTD.
+ */
+function coveredMonths(
+  series: MonthlyCounts,
+  year: number,
+  month: number | undefined,
+  now: Date,
+): MonthlyCounts {
+  if (month !== undefined) return filterMonths(series, (key) => key === MONTH_KEYS[month - 1]);
+  if (year !== now.getUTCFullYear()) return series;
+  return filterMonths(series, (key) => {
+    const index = MONTH_KEYS.indexOf(key as (typeof MONTH_KEYS)[number]);
+    return index === -1 || index <= now.getUTCMonth();
+  });
+}
 
 /** Escape table delimiters and line breaks without changing structured keys. */
 function cell(value: string): string {
@@ -91,8 +151,7 @@ function comparisonTable(
 
 export const fbiGetLeoka = tool('fbi_get_leoka', {
   title: 'FBI Get LEOKA',
-  description:
-    'LEOKA officer fatality trends, weapons, activity, circumstances, demographics, geographic regions, and time-of-day/month breakdowns. Period "ytd" requests a year; "monthly" requires month and includes comparison-year monthly series. Both periods return the CDE YTD totals block, separately from month-specific breakdowns. Raw dod/doi totals have unspecified interpretation; classified deaths remain in the trend and region series.',
+  description: `LEOKA officer fatality trends, weapons, activity, circumstances, demographics, geographic regions, and time-of-day/month breakdowns, ${FLOOR_YEAR} through the current year. Period "ytd" requests a year; "monthly" requires month and includes the same month of the comparison year. Both periods return the CDE YTD totals block, separately from month-specific breakdowns. Raw dod/doi totals have unspecified interpretation; classified deaths remain in the trend and region series.`,
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [
@@ -109,11 +168,17 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
       recovery: 'Provide a month (1–12) when requesting monthly LEOKA data.',
     },
     {
+      reason: 'year_out_of_range',
+      code: JsonRpcErrorCode.ValidationError,
+      when: 'year is after the current UTC year.',
+      recovery: `Use a year from ${FLOOR_YEAR} through the current year; current-year data runs through the latest reported month.`,
+      thrownBy: 'service',
+    },
+    {
       reason: 'no_data',
       code: JsonRpcErrorCode.NotFound,
       when: 'The API returned no LEOKA data for the requested year/month.',
-      recovery:
-        'Try a different year. LEOKA data typically lags by 6–12 months. The API requires a valid year parameter.',
+      recovery: `CDE LEOKA data starts in ${FLOOR_YEAR} and runs through the latest reported month of the current year; request an earlier month or year within that window.`,
     },
   ],
 
@@ -126,9 +191,10 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
     year: z
       .number()
       .int()
-      .min(2000)
-      .max(2030)
-      .describe('Year to retrieve LEOKA data for. Required — the API does not default to a year.'),
+      .min(FLOOR_YEAR)
+      .describe(
+        `Year to retrieve LEOKA data for, ${FLOOR_YEAR} through the current year. Required — the API does not default to a year.`,
+      ),
     month: z
       .number()
       .int()
@@ -155,7 +221,7 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
     ),
     /** Year-over-year death trend. */
     deaths_by_year: NestedCountMapSchema.optional().describe(
-      'Annual officer death totals by type. Keys: "Felonious", "Accidental". Values: { "2022": 61, ... }',
+      'Annual officer death totals by type over the window CDE returns, which can include years after the requested one (YTD 2023 returns 2018–2026); the current year\'s entry is year-to-date. Keys: "Felonious", "Accidental". Values: { "2022": 61, ... }',
     ),
     /** Geographic region breakdown by killing type. */
     deaths_by_region: NestedCountMapSchema.optional().describe(
@@ -198,7 +264,7 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
       'Killing type to hour key to count. Hour keys, including -1, are preserved literally.',
     ),
     officer_death_by_month: MonthlyCountMapSchema.optional().describe(
-      'Killing type to year to month to count. Includes returned comparison years and zero values without filtering.',
+      'Killing type to year to month to count, for the requested year and the comparison year CDE returns. Only months CDE covers are present: monthly responses hold the requested month under each year, current-year YTD responses hold months through the current UTC month, and past-year YTD responses keep the series as returned. Zeros are reported counts; null means unavailable.',
     ),
   }),
 
@@ -211,6 +277,8 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
     if (input.period === 'ytd' && input.month !== undefined) {
       throw ctx.fail('month_not_applicable', 'month is not applicable when period is "ytd".');
     }
+    assertYearsNotFuture([{ field: 'year', year: input.year }], FLOOR_YEAR, ctx);
+    const now = new Date();
 
     const svc = getFbiApiService();
     const chartData =
@@ -268,14 +336,20 @@ export const fbiGetLeoka = tool('fbi_get_leoka', {
         officer_death_by_time_of_day: chartData.officer_death_by_time_of_day,
       }),
       ...(chartData.officer_death_by_month && {
-        officer_death_by_month: chartData.officer_death_by_month,
+        officer_death_by_month: coveredMonths(
+          chartData.officer_death_by_month,
+          input.year,
+          input.month,
+          now,
+        ),
       }),
     };
   },
 
   format: (result) => {
     const lines: string[] = [
-      `## FBI LEOKA — ${result.period === 'ytd' ? 'Year-to-Date' : 'Monthly'} ${result.period} (${result.year}${result.month ? `-${String(result.month).padStart(2, '0')}` : ''})`,
+      `## FBI LEOKA — ${result.period === 'ytd' ? 'Year-to-Date' : 'Monthly'} (${result.year}${result.month ? `-${String(result.month).padStart(2, '0')}` : ''})`,
+      `**Period:** ${result.period}`,
       '',
       '### CDE YTD Totals',
       'Source: incidents_victim_officer_totals_ytd. These are not combined fatality counts or requested-month totals. The upstream dod/doi abbreviations have unspecified interpretation.',

@@ -3,6 +3,7 @@
  * @module tests/tools/get-crime-estimates.tool.test
  */
 
+import { z } from '@cyanheads/mcp-ts-core';
 import { createMockContext } from '@cyanheads/mcp-ts-core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fbiGetCrimeEstimates } from '@/mcp-server/tools/definitions/get-crime-estimates.tool.js';
@@ -227,8 +228,8 @@ describe('fbiGetCrimeEstimates', () => {
     const input = fbiGetCrimeEstimates.input.parse({
       scope: 'national',
       offense: 'homicide',
-      from_year: 2030,
-      to_year: 2030,
+      from_year: 2024,
+      to_year: 2024,
     });
     await expect(fbiGetCrimeEstimates.handler(input, ctx)).rejects.toMatchObject({
       data: { reason: 'no_data' },
@@ -289,6 +290,32 @@ describe('fbiGetCrimeEstimates', () => {
     const text = (blocks[0] as { text: string }).text;
     expect(text).toContain('2022');
     expect(text).toContain('—');
+  });
+
+  it('describes rates against the participating population', () => {
+    const { shape } = fbiGetCrimeEstimates.output;
+    const month = shape.months.element.shape;
+    const comparison = shape.comparisons.unwrap().element.shape.months.element.shape;
+    for (const field of [
+      month.rate_per_100k,
+      month.clearance_rate_per_100k,
+      comparison.rate_per_100k,
+      comparison.clearance_rate_per_100k,
+    ])
+      expect(field.description).toContain('per 100,000 participating population');
+    expect(fbiGetCrimeEstimates.description).toContain('per 100,000 participating population');
+    expect(fbiGetCrimeEstimates.description).not.toMatch(/per 100k population/);
+  });
+
+  it('advertises the 1985 floor without a fixed ceiling', () => {
+    const properties = z.toJSONSchema(fbiGetCrimeEstimates.input).properties ?? {};
+    for (const field of ['from_year', 'to_year']) {
+      const year = properties[field] as { minimum?: number; maximum?: number };
+      expect(year.minimum).toBe(1985);
+      // Only the integer type's own bound remains; the ceiling is checked per call.
+      expect(year.maximum ?? Number.POSITIVE_INFINITY).toBeGreaterThan(9999);
+    }
+    expect(properties.include_comparisons).toMatchObject({ type: 'boolean', default: false });
   });
 
   it('months are sorted chronologically', async () => {

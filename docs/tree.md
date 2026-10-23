@@ -1,6 +1,6 @@
 # fbi-crime-mcp-server - Directory Structure
 
-Generated on: 2026-10-13 15:52:00
+Generated on: 2026-10-23 05:04:05
 
 ```text
 fbi-crime-mcp-server/
@@ -147,18 +147,20 @@ fbi-crime-mcp-server/
 │   │   │       ├── agency.resource.ts
 │   │   │       └── state.resource.ts
 │   │   └── tools/
-│   │       └── definitions/
-│   │           ├── get-agency.tool.ts
-│   │           ├── get-arrests.tool.ts
-│   │           ├── get-arson.tool.ts
-│   │           ├── get-crime-estimates.tool.ts
-│   │           ├── get-hate-crimes.tool.ts
-│   │           ├── get-human-trafficking.tool.ts
-│   │           ├── get-leoka.tool.ts
-│   │           ├── get-nibrs-breakdown.tool.ts
-│   │           ├── get-participation.tool.ts
-│   │           ├── list-code-table.tool.ts
-│   │           └── search-agencies.tool.ts
+│   │       ├── definitions/
+│   │       │   ├── get-agency.tool.ts
+│   │       │   ├── get-arrests.tool.ts
+│   │       │   ├── get-arson.tool.ts
+│   │       │   ├── get-crime-estimates.tool.ts
+│   │       │   ├── get-hate-crimes.tool.ts
+│   │       │   ├── get-human-trafficking.tool.ts
+│   │       │   ├── get-leoka.tool.ts
+│   │       │   ├── get-nibrs-breakdown.tool.ts
+│   │       │   ├── get-participation.tool.ts
+│   │       │   ├── list-code-table.tool.ts
+│   │       │   └── search-agencies.tool.ts
+│   │       ├── cde-scoped-range.ts
+│   │       └── cde-totals.ts
 │   ├── services/
 │   │   └── fbi-api/
 │   │       ├── fbi-api-service.ts
@@ -167,12 +169,33 @@ fbi-crime-mcp-server/
 ├── tests/
 │   ├── fixtures/
 │   │   └── cde/
+│   │       ├── agency-directory-tx.json
+│   │       ├── agency-txspd-homicide-202401.json
+│   │       ├── agency-violent-2023-az0141000.json
+│   │       ├── agency-violent-2023-txspd0000.json
 │   │       ├── agency.json
+│   │       ├── arrest-agency-txspd0000-2023.json
+│   │       ├── arrest-agency-unknown-2023.json
+│   │       ├── arrest-national-2023.json
+│   │       ├── arrest-national-robbery30-2023.json
+│   │       ├── arrest-state-tx-2023.json
+│   │       ├── hate-agency-txspd0000-2023.json
+│   │       ├── hate-agency-unknown-2023.json
+│   │       ├── hate-national-2023.json
+│   │       ├── hate-national-bias12-2023.json
+│   │       ├── hate-state-tx-2023.json
 │   │       ├── monthly-2023-6.json
+│   │       ├── national-2026.json
 │   │       ├── national-jun2023.json
+│   │       ├── nibrs-agency-txspd0000-13a-2023.json
+│   │       ├── nibrs-agency-unknown-13a-2023.json
+│   │       ├── nibrs-national-120-2015-2025.json
+│   │       ├── nibrs-national-13a-2023.json
+│   │       ├── nibrs-state-tx-13a-2023.json
 │   │       ├── state.json
 │   │       ├── unknown-ori.json
-│   │       └── ytd-2023.json
+│   │       ├── ytd-2023.json
+│   │       └── ytd-2026.json
 │   ├── prompts/
 │   ├── resources/
 │   │   ├── agency.resource.test.ts
@@ -181,6 +204,8 @@ fbi-crime-mcp-server/
 │   │   ├── cde-contract.test.ts
 │   │   └── fbi-api-service.test.ts
 │   ├── tools/
+│   │   ├── cde-scoped-range.test.ts
+│   │   ├── cde-totals.test.ts
 │   │   ├── get-agency.tool.test.ts
 │   │   ├── get-arrests.tool.test.ts
 │   │   ├── get-arson.tool.test.ts

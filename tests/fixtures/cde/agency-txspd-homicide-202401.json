@@ -1,0 +1,42 @@
+{
+  "offenses": {
+    "rates": {
+      "Texas Offenses": { "01-2024": 0.47 },
+      "Texas Clearances": { "01-2024": 0.28 },
+      "United States Offenses": { "01-2024": 0.41 },
+      "United States Clearances": { "01-2024": 0.25 },
+      "San Antonio Police Department Offenses": { "01-2024": 0.53 },
+      "San Antonio Police Department Clearances": { "01-2024": 0.2 }
+    },
+    "actuals": {
+      "San Antonio Police Department Offenses": { "01-2024": 8 },
+      "San Antonio Police Department Clearances": { "01-2024": 3 }
+    }
+  },
+  "tooltips": {
+    "leftYAxisHeaders": {
+      "yAxisHeaderRates": "Offenses per 100,000 people",
+      "yAxisHeaderActual": "Offenses"
+    },
+    "Percent of Population Coverage": {
+      "Texas": { "01-2024": 99.31 },
+      "United States": { "01-2024": 96.74 }
+    }
+  },
+  "populations": {
+    "population": {
+      "Texas": { "01-2024": 31290831 },
+      "United States": { "01-2024": 343551384 },
+      "San Antonio Police Department": { "01-2024": 1514458 }
+    },
+    "participated_population": {
+      "Texas": { "01-2024": 31074446 },
+      "United States": { "01-2024": 332363574 },
+      "San Antonio Police Department": { "01-2024": 1514458 }
+    }
+  },
+  "cde_properties": {
+    "max_data_date": { "UCR": "10/2026" },
+    "last_refresh_date": { "UCR": "10/15/2026" }
+  }
+}

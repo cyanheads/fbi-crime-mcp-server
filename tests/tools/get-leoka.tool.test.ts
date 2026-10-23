@@ -3,6 +3,7 @@
  * @module tests/tools/get-leoka.tool.test
  */
 
+import { z } from '@cyanheads/mcp-ts-core';
 import { createMockContext } from '@cyanheads/mcp-ts-core/testing';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fbiGetLeoka } from '@/mcp-server/tools/definitions/get-leoka.tool.js';
@@ -85,7 +86,7 @@ describe('fbiGetLeoka', () => {
   it('throws no_data when ytd returns chart data without totals', async () => {
     mockGetLeokaYtd.mockResolvedValue({});
     const ctx = createMockContext({ errors: fbiGetLeoka.errors });
-    const input = fbiGetLeoka.input.parse({ period: 'ytd', year: 2030 });
+    const input = fbiGetLeoka.input.parse({ period: 'ytd', year: 2024 });
     await expect(fbiGetLeoka.handler(input, ctx)).rejects.toMatchObject({
       data: { reason: 'no_data' },
     });
@@ -137,6 +138,56 @@ describe('fbiGetLeoka', () => {
     expect(text).toContain('2022-06');
     expect(text).toContain('Handguns');
     expect(text).toContain('3');
+  });
+
+  it('names the period once in the heading', () => {
+    const ytd = fbiGetLeoka.output.parse({ period: 'ytd', year: 2024, totals: {} });
+    const monthly = fbiGetLeoka.output.parse({
+      period: 'monthly',
+      year: 2025,
+      month: 6,
+      totals: {},
+    });
+    const heading = (output: typeof ytd) =>
+      (fbiGetLeoka.format!(output)[0] as { text: string }).text.split('\n')[0];
+    expect(heading(ytd)).toBe('## FBI LEOKA — Year-to-Date (2024)');
+    expect(heading(monthly)).toBe('## FBI LEOKA — Monthly (2025-06)');
+  });
+
+  it('describes which officer_death_by_month and deaths_by_year entries are present', () => {
+    const shape = fbiGetLeoka.output.shape;
+    expect(shape.officer_death_by_month.description).toMatch(/requested month/);
+    expect(shape.officer_death_by_month.description).not.toMatch(/without filtering/);
+    expect(shape.deaths_by_year.description).toMatch(/year-to-date/);
+    expect(shape.deaths_by_year.description).toMatch(/after the requested/);
+  });
+
+  it('advertises the 2020 floor without a fixed ceiling', () => {
+    const year = z.toJSONSchema(fbiGetLeoka.input).properties?.year as {
+      minimum?: number;
+      maximum?: number;
+    };
+    expect(year.minimum).toBe(2020);
+    // Only the integer type's own bound remains; the ceiling is checked per call.
+    expect(year.maximum ?? Number.POSITIVE_INFINITY).toBeGreaterThan(9999);
+  });
+
+  it('checks the ceiling against the current UTC year on every call', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      mockGetLeokaYtd.mockResolvedValue(mockChartData);
+      const ctx = createMockContext({ errors: fbiGetLeoka.errors });
+      const input = fbiGetLeoka.input.parse({ period: 'ytd', year: 2031 });
+      vi.setSystemTime(new Date('2030-06-01T00:00:00Z'));
+      await expect(fbiGetLeoka.handler(input, ctx)).rejects.toMatchObject({
+        data: { reason: 'year_out_of_range' },
+      });
+      expect(mockGetLeokaYtd).not.toHaveBeenCalled();
+      vi.setSystemTime(new Date('2031-01-01T00:00:00Z'));
+      await expect(fbiGetLeoka.handler(input, ctx)).resolves.toMatchObject({ year: 2031 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('formats lighting conditions when present', () => {

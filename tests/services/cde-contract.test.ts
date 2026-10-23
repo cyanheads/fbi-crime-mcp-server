@@ -61,6 +61,75 @@ function reply(path: string, payload: unknown): void {
   });
 }
 
+/**
+ * Route every CDE request, so a request a zero-fetch check forbids is recorded in `http.calls`
+ * (createFetchMock rejects unmatched requests without recording them).
+ */
+function catchAllRequests(): void {
+  http.route({
+    match: (request) => new URL(request.url).origin === baseUrl,
+    respond: Response.json({}),
+  });
+}
+
+/** Default summarized output for the captured state and agency fixtures, pinned byte for byte. */
+const PINNED = {
+  state: {
+    structured: {
+      scope: 'state',
+      offense: 'robbery',
+      entity_name: 'California',
+      state_abbr: 'CA',
+      from: '01-2022',
+      to: '01-2022',
+      months: [
+        {
+          year: 2022,
+          month: 1,
+          rate_per_100k: 10.89,
+          clearance_rate_per_100k: 2.7,
+          actual_count: 4208,
+          clearance_count: 1042,
+          population: 39029342,
+          participated_population: 38642850,
+          population_coverage_percent: 99.01,
+        },
+      ],
+      total_months: 1,
+      data_last_updated: '09/15/2026',
+      max_data_date: '09/2026',
+    },
+    text: '## FBI Crime Data — robbery (CA)\n**Scope:** state | **State:** CA\n**Offense:** robbery | **Range:** 01-2022 → 01-2022\n**Entity:** California\n**Months returned:** 1\n**Data last updated:** 09/15/2026\n**Max data date:** 09/2026\n\nReporting coverage may be incomplete or unavailable. — means unavailable; coverage is supplied by CDE, not calculated from populations.\n| Year | Month | Rate/100k | Clearance Rate | Actual Count | Clearances | Population | Participating population | Population coverage |\n|:-----|:-----:|----------:|---------------:|-------------:|-----------:|-----------:|-------------------------:|--------------------:|\n| 2022 | 01 | 10.89 | 2.7 | 4,208 | 1,042 | 39,029,342 | 38,642,850 | 99.01% |',
+  },
+  agency: {
+    structured: {
+      scope: 'agency',
+      offense: 'robbery',
+      entity_name: 'Emeryville Police Department',
+      ori: 'CA0010400',
+      from: '01-2022',
+      to: '01-2022',
+      months: [
+        {
+          year: 2022,
+          month: 1,
+          rate_per_100k: 70.42,
+          clearance_rate_per_100k: 15.65,
+          actual_count: 9,
+          clearance_count: 2,
+          population: 12781,
+          participated_population: 12781,
+          population_coverage_percent: null,
+        },
+      ],
+      total_months: 1,
+      data_last_updated: '09/15/2026',
+      max_data_date: '09/2026',
+    },
+    text: '## FBI Crime Data — robbery (ORI: CA0010400)\n**Scope:** agency | **ORI:** CA0010400\n**Offense:** robbery | **Range:** 01-2022 → 01-2022\n**Entity:** Emeryville Police Department\n**Months returned:** 1\n**Data last updated:** 09/15/2026\n**Max data date:** 09/2026\n\nReporting coverage may be incomplete or unavailable. — means unavailable; coverage is supplied by CDE, not calculated from populations.\n| Year | Month | Rate/100k | Clearance Rate | Actual Count | Clearances | Population | Participating population | Population coverage |\n|:-----|:-----:|----------:|---------------:|-------------:|-----------:|-----------:|-------------------------:|--------------------:|\n| 2022 | 01 | 70.42 | 15.65 | 9 | 2 | 12,781 | 12,781 | — |',
+  },
+};
+
 describe('CDE characterization', () => {
   it('national rows retain nullable counts, zero, rate-only months and chronological order', async () => {
     reply('/summarized/national/robbery', {
@@ -130,6 +199,23 @@ describe('CDE characterization', () => {
         ],
       });
       expect(text(result)).toContain('| 2022 | 01 | 10.89 | 2.7 | 4,208 | 1,042 |');
+    });
+  }
+  for (const [scope, path, fixture] of [
+    ['state', '/summarized/state/CA/robbery', 'state'],
+    ['agency', '/summarized/agency/CA0010400/robbery', 'agency'],
+  ] as const) {
+    it(`pins the complete default ${scope} output on both surfaces`, async () => {
+      reply(path, capture(fixture));
+      const result = await runToolContract(fbiGetCrimeEstimates, {
+        ...summarizedInput,
+        scope,
+        ...(scope === 'state' && { ori: undefined, state_abbr: 'CA' }),
+      });
+      expect(JSON.stringify(result.structuredContent)).toBe(
+        JSON.stringify(PINNED[scope].structured),
+      );
+      expect(text(result)).toBe(PINNED[scope].text);
     });
   }
   for (const period of ['ytd', 'monthly'] as const) {
@@ -202,7 +288,7 @@ function expectFailure(
 
 describe('absent and malformed upstream data (#11)', () => {
   for (const period of ['ytd', 'monthly'] as const) {
-    const input = { period, year: 2030, ...(period === 'monthly' && { month: 1 }) };
+    const input = { period, year: 2024, ...(period === 'monthly' && { month: 1 }) };
     for (const [label, payload] of Object.entries({
       nullEnvelope: null,
       emptyEnvelope: [],
@@ -324,7 +410,7 @@ describe('absent and malformed upstream data (#11)', () => {
       match: (request) => new URL(request.url).pathname === '/leoka/monthly',
       respond: new Response('Bad request, please ensure year is valid', { status: 400 }),
     });
-    const result = await runToolContract(fbiGetLeoka, { period: 'monthly', year: 2030, month: 1 });
+    const result = await runToolContract(fbiGetLeoka, { period: 'monthly', year: 2024, month: 1 });
     expect(result.structuredContent).toMatchObject({
       error: { code: JsonRpcErrorCode.InvalidParams },
     });
@@ -682,6 +768,34 @@ describe('identifier syntax and casing (#17)', () => {
       expect(http.calls).toHaveLength(0);
     });
   }
+  it('reads blank identifiers from form clients as unset', async () => {
+    reply('/summarized/national/robbery', capture('national-jun2023'));
+    const national = await runToolContract(fbiGetCrimeEstimates, {
+      scope: 'national',
+      offense: 'robbery',
+      state_abbr: '',
+      ori: '',
+      from_year: 2023,
+      from_month: 6,
+      to_year: 2023,
+      to_month: 6,
+    });
+    expect(national.isError).not.toBe(true);
+    expect(national.structuredContent).not.toHaveProperty('state_abbr');
+    expect(http.calls).toHaveLength(1);
+    catchAllRequests();
+    expectFailure(
+      await runToolContract(fbiGetCrimeEstimates, {
+        ...summarizedInput,
+        scope: 'state',
+        ori: '',
+        state_abbr: '',
+      }),
+      fbiGetCrimeEstimates,
+      'scope_param_missing',
+    );
+    expect(http.calls).toHaveLength(1);
+  });
   it('keeps well-formed unknown identifiers as no_data with identifier-first recovery', async () => {
     http.route({ match: () => true, respond: Response.json(capture('unknown-ori')) });
     const result = await runToolContract(fbiGetCrimeEstimates, {
@@ -803,7 +917,15 @@ describe('faithful LEOKA totals and breakdowns (#8, #6)', () => {
         /Officers feloniously killed|Officers accidentally killed|Officers killed \(total\)/,
       );
       for (const key of newFields) {
-        expect(result.structuredContent?.[key]).toEqual(chart[key]);
+        // Monthly officer_death_by_month keeps only the requested month; CDE zero-fills the rest.
+        const expected =
+          period === 'monthly' && key === 'officer_death_by_month'
+            ? {
+                Felonious: { '2022': { Jun: 12 }, '2023': { Jun: 6 } },
+                Accidental: { '2022': { Jun: 4 }, '2023': { Jun: 2 } },
+              }
+            : chart[key];
+        expect(result.structuredContent?.[key]).toEqual(expected);
         const section = rendered.split(`### ${key}\n`)[1]?.split('\n### ')[0];
         expect(section, key).toBeDefined();
         const verifyPaths = (value: unknown, path: string[] = []): void => {
@@ -813,11 +935,15 @@ describe('faithful LEOKA totals and breakdowns (#8, #6)', () => {
             for (const [child, count] of Object.entries(value as Record<string, unknown>))
               verifyPaths(count, [...path, child]);
         };
-        verifyPaths(chart[key]);
+        verifyPaths(expected);
       }
       expect(rendered).toContain('| Felonious | -1 |');
       expect(rendered).toContain('| Felonious | 2022 | Jun | 12 |');
       expect(rendered).toContain('| Accidental | 2023 | Jun | 2 |');
+      if (period === 'monthly') {
+        expect(rendered).not.toContain('| Felonious | 2022 | Jan |');
+        expect(rendered).not.toContain('| Accidental | 2023 | Dec |');
+      }
       expect(rendered).not.toMatch(/\[object Object\]|NaN/);
       expect(http.calls).toHaveLength(1);
     });
@@ -912,4 +1038,517 @@ describe('faithful LEOKA totals and breakdowns (#8, #6)', () => {
       expect(performance.now() - started).toBeLessThan(2000);
     });
   }
+});
+
+/** Pin the wall clock (Date only; timers stay real so fetch routing is unaffected). */
+function pinDate(iso: string): void {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(iso));
+}
+
+describe('LEOKA month coverage (#22)', () => {
+  it('monthly keeps only the requested month, genuine zeros and null groups included', async () => {
+    const chart = {
+      incidents_victim_officer_totals_ytd: { total_officers: 0 },
+      weapons: { Handguns: 0 },
+      officer_death_by_month: {
+        Future: {
+          '2022': { Jan: 0, Jun: 0, Dec: 0, Extra: 3 },
+          '2023': null,
+          '2021': {},
+          '2020': { Jan: 5 },
+        },
+        missing: null,
+        empty: {},
+      },
+    };
+    reply('/leoka/monthly', envelope('monthly', chart));
+    const result = await runToolContract(fbiGetLeoka, { period: 'monthly', year: 2022, month: 6 });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ weapons: { Handguns: 0 } });
+    expect(result.structuredContent?.officer_death_by_month).toEqual({
+      Future: { '2022': { Jun: 0 }, '2023': null, '2021': {}, '2020': {} },
+      missing: null,
+      empty: {},
+    });
+    const rendered = text(result);
+    for (const row of [
+      '| Future | 2022 | Jun | 0 |',
+      '| Future | 2023 | — | Unavailable |',
+      '| Future | 2021 | — | No reported entries |',
+      '| Future | 2020 | — | No reported entries |',
+      '| missing | — | — | Unavailable |',
+    ])
+      expect(rendered).toContain(row);
+    expect(rendered).not.toMatch(/\| Future \| 20\d\d \| (Jan|Dec|Extra) \|/);
+  });
+  it('current-year YTD drops months after the current UTC month from both years', async () => {
+    pinDate('2026-10-22T12:00:00Z');
+    reply('/leoka/ytd', capture('ytd-2026'));
+    const result = await runToolContract(fbiGetLeoka, { period: 'ytd', year: 2026 });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent?.officer_death_by_month).toEqual({
+      Felonious: {
+        '2025': { Jan: 3, Feb: 7, Mar: 5, Apr: 2, May: 4, Jun: 6, Jul: 5, Aug: 6, Sep: 4, Oct: 4 },
+        '2026': { Jan: 3, Feb: 5, Mar: 2, Apr: 6, May: 4, Jun: 1, Jul: 5, Aug: 2, Sep: 3, Oct: 3 },
+      },
+      Accidental: {
+        '2025': { Jan: 3, Feb: 1, Mar: 0, Apr: 3, May: 1, Jun: 3, Jul: 4, Aug: 2, Sep: 3, Oct: 4 },
+        '2026': { Jan: 5, Feb: 5, Mar: 1, Apr: 4, May: 4, Jun: 4, Jul: 1, Aug: 3, Sep: 3, Oct: 3 },
+      },
+    });
+    expect(result.structuredContent).toMatchObject({
+      deaths_by_year: { Felonious: { '2025': 53, '2026': 34 }, Accidental: { '2025': 28 } },
+    });
+    const rendered = text(result);
+    expect(rendered).toContain('| Accidental | 2025 | Mar | 0 |');
+    expect(rendered).toContain('| Felonious | 2026 | Oct | 3 |');
+    expect(rendered).not.toMatch(/\| (Felonious|Accidental) \| 202[56] \| (Nov|Dec) \|/);
+  });
+  for (const [now, kept] of [
+    ['2026-01-01T00:00:00Z', ['Jan']],
+    ['2026-12-31T23:59:59.999Z', null],
+    ['2027-01-01T00:00:00Z', null],
+  ] as const) {
+    it(`YTD 2026 at ${now} keeps ${kept ? kept.join(', ') : 'every month'}`, async () => {
+      pinDate(now);
+      const payload = capture('ytd-2026') as Record<
+        string,
+        {
+          data: {
+            chart_data: Record<string, Record<string, Record<string, Record<string, number>>>>;
+          };
+        }
+      >[];
+      const series = payload[0]!.leoka_chart_ytd!.data.chart_data.officer_death_by_month!;
+      reply('/leoka/ytd', payload);
+      const result = await runToolContract(fbiGetLeoka, { period: 'ytd', year: 2026 });
+      expect(result.isError).not.toBe(true);
+      const months = result.structuredContent?.officer_death_by_month as typeof series;
+      for (const type of ['Felonious', 'Accidental'])
+        for (const year of ['2025', '2026'])
+          expect(Object.keys(months[type]![year]!).sort()).toEqual(
+            [...(kept ?? Object.keys(series[type]![year]!))].sort(),
+          );
+      if (kept) expect(months.Felonious?.['2025']).toEqual({ Jan: 3 });
+      else expect(months).toEqual(series);
+    });
+  }
+  it('past-year YTD keeps trailing zero months', async () => {
+    pinDate('2026-10-22T12:00:00Z');
+    const chart = {
+      incidents_victim_officer_totals_ytd: {},
+      officer_death_by_month: { Felonious: { '2024': { Oct: 0, Nov: 5, Dec: 0, Extra: 1 } } },
+    };
+    reply('/leoka/ytd', envelope('ytd', chart));
+    const result = await runToolContract(fbiGetLeoka, { period: 'ytd', year: 2024 });
+    expect(result.structuredContent?.officer_death_by_month).toEqual(chart.officer_death_by_month);
+    expect(text(result)).toContain('| Felonious | 2024 | Dec | 0 |');
+  });
+  it('current-year YTD keeps unrecognized month keys and null groups', async () => {
+    pinDate('2026-03-05T00:00:00Z');
+    reply(
+      '/leoka/ytd',
+      envelope('ytd', {
+        incidents_victim_officer_totals_ytd: {},
+        officer_death_by_month: {
+          Future: { '2025': { Mar: 0, Apr: 0, Extra: 2 }, '2026': null },
+          missing: null,
+        },
+      }),
+    );
+    const result = await runToolContract(fbiGetLeoka, { period: 'ytd', year: 2026 });
+    expect(result.structuredContent?.officer_death_by_month).toEqual({
+      Future: { '2025': { Mar: 0, Extra: 2 }, '2026': null },
+      missing: null,
+    });
+  });
+});
+
+describe('CDE year windows (#23)', () => {
+  for (const [scope, path, entity] of [
+    ['national', '/summarized/national/robbery', 'United States'],
+    ['state', '/summarized/state/CA/robbery', 'California'],
+    ['agency', '/summarized/agency/CA0010400/robbery', 'Emeryville Police Department'],
+  ] as const) {
+    it(`accepts the 1985 floor at ${scope} scope`, async () => {
+      reply(path, { offenses: { actuals: { [`${entity} Offenses`]: { '01-1985': 8 } } } });
+      const result = await runToolContract(fbiGetCrimeEstimates, {
+        scope,
+        offense: 'robbery',
+        ...(scope === 'state' && { state_abbr: 'CA' }),
+        ...(scope === 'agency' && { ori: 'CA0010400' }),
+        from_year: 1985,
+        from_month: 1,
+        to_year: 1985,
+        to_month: 1,
+      });
+      expect(result.isError).not.toBe(true);
+      expect(result.structuredContent).toMatchObject({ months: [{ year: 1985, actual_count: 8 }] });
+      expect(text(result)).toContain('| 1985 | 01 |');
+      expect(new URL(http.calls[0]!.request.url).searchParams.get('from')).toBe('01-1985');
+      expect(http.calls).toHaveLength(1);
+    });
+  }
+  for (const field of ['from_year', 'to_year'] as const) {
+    it(`rejects ${field} 1984 in the schema without fetching`, async () => {
+      catchAllRequests();
+      const result = await runToolContract(fbiGetCrimeEstimates, {
+        scope: 'national',
+        offense: 'robbery',
+        from_year: 1985,
+        to_year: 1985,
+        [field]: 1984,
+      });
+      expect(result.structuredContent).toMatchObject({
+        error: { code: JsonRpcErrorCode.InvalidParams, data: { reason: 'invalid_arguments' } },
+      });
+      expect(text(result)).toContain(field);
+      expect(text(result)).toContain('1985');
+      expect(http.calls).toHaveLength(0);
+    });
+  }
+  for (const period of ['ytd', 'monthly'] as const) {
+    it(`rejects LEOKA ${period} 2019 in the schema without fetching`, async () => {
+      catchAllRequests();
+      const result = await runToolContract(fbiGetLeoka, {
+        period,
+        year: 2019,
+        ...(period === 'monthly' && { month: 12 }),
+      });
+      expect(result.structuredContent).toMatchObject({
+        error: { code: JsonRpcErrorCode.InvalidParams, data: { reason: 'invalid_arguments' } },
+      });
+      expect(text(result)).toContain('2020');
+      expect(http.calls).toHaveLength(0);
+    });
+    it(`accepts LEOKA ${period} 2020`, async () => {
+      reply(
+        `/leoka/${period}`,
+        envelope(period, { incidents_victim_officer_totals_ytd: { total_officers: 1 } }),
+      );
+      const result = await runToolContract(fbiGetLeoka, {
+        period,
+        year: 2020,
+        ...(period === 'monthly' && { month: 1 }),
+      });
+      expect(result.isError).not.toBe(true);
+      expect(new URL(http.calls[0]!.request.url).searchParams.get('year')).toBe('2020');
+    });
+  }
+
+  /** year_out_of_range on both surfaces with the window in the hint, before any fetch. */
+  function expectOutOfRange(
+    result: Awaited<ReturnType<typeof runToolContract>>,
+    tool: typeof fbiGetLeoka | typeof fbiGetCrimeEstimates,
+    window: string,
+  ): void {
+    const contract = tool.errors?.find((entry) => entry.reason === 'year_out_of_range');
+    expect(contract).toBeDefined();
+    expect(contract?.recovery).toContain(window.split(' ')[0]);
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: contract?.code,
+        data: { reason: 'year_out_of_range', recovery: { hint: expect.stringContaining(window) } },
+      },
+    });
+    expect(text(result)).toContain('year_out_of_range');
+    expect(text(result)).toContain(window);
+    expect(http.calls).toHaveLength(0);
+  }
+  for (const range of [
+    { from_year: 2026, to_year: 2027 },
+    { from_year: 2027, to_year: 2027 },
+    { from_year: 2027, to_year: 2026 },
+  ]) {
+    it(`summarized ${JSON.stringify(range)} fails year_out_of_range in 2026`, async () => {
+      pinDate('2026-10-22T12:00:00Z');
+      catchAllRequests();
+      expectOutOfRange(
+        await runToolContract(fbiGetCrimeEstimates, {
+          scope: 'national',
+          offense: 'robbery',
+          ...range,
+        }),
+        fbiGetCrimeEstimates,
+        '1985 through 2026',
+      );
+    });
+  }
+  for (const period of ['ytd', 'monthly'] as const) {
+    it(`LEOKA ${period} 2027 fails year_out_of_range in 2026`, async () => {
+      pinDate('2026-10-22T12:00:00Z');
+      catchAllRequests();
+      expectOutOfRange(
+        await runToolContract(fbiGetLeoka, {
+          period,
+          year: 2027,
+          ...(period === 'monthly' && { month: 1 }),
+        }),
+        fbiGetLeoka,
+        '2020 through 2026',
+      );
+    });
+  }
+  it('summarized current year past the latest data keeps null rows', async () => {
+    pinDate('2026-10-22T12:00:00Z');
+    reply('/summarized/national/robbery', capture('national-2026'));
+    const result = await runToolContract(fbiGetCrimeEstimates, {
+      scope: 'national',
+      offense: 'robbery',
+      from_year: 2026,
+      to_year: 2026,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ total_months: 12, max_data_date: '10/2026' });
+    const months = (result.structuredContent as { months: Record<string, unknown>[] }).months;
+    expect(months[9]).toMatchObject({ month: 10, actual_count: 625, rate_per_100k: 0.98 });
+    expect(months[10]).toEqual({
+      year: 2026,
+      month: 11,
+      rate_per_100k: null,
+      clearance_rate_per_100k: null,
+      actual_count: null,
+      clearance_count: null,
+      population: 345206793,
+      participated_population: null,
+      population_coverage_percent: null,
+    });
+    expect(text(result)).toContain('| 2026 | 12 | — | — | — | — | 345,206,793 | — | — |');
+  });
+  for (const [now, accepted] of [
+    ['2026-12-31T23:59:59.999Z', false],
+    ['2027-01-01T00:00:00Z', true],
+  ] as const) {
+    it(`2027 is ${accepted ? 'accepted' : 'rejected'} at ${now} on both tools`, async () => {
+      pinDate(now);
+      reply('/summarized/national/robbery', {
+        offenses: { actuals: { 'United States Offenses': { '01-2027': null } } },
+      });
+      reply('/leoka/ytd', envelope('ytd', { incidents_victim_officer_totals_ytd: {} }));
+      catchAllRequests();
+      const summarized = await runToolContract(fbiGetCrimeEstimates, {
+        scope: 'national',
+        offense: 'robbery',
+        from_year: 2027,
+        to_year: 2027,
+      });
+      const leoka = await runToolContract(fbiGetLeoka, { period: 'ytd', year: 2027 });
+      if (accepted) {
+        expect(summarized.isError).not.toBe(true);
+        expect(leoka.isError).not.toBe(true);
+        expect(http.calls).toHaveLength(2);
+      } else {
+        expectOutOfRange(summarized, fbiGetCrimeEstimates, '1985 through 2026');
+        expectOutOfRange(leoka, fbiGetLeoka, '2020 through 2026');
+      }
+    });
+  }
+  it('LEOKA no_data recovery names the 2020 start without a lag claim', async () => {
+    reply('/leoka/ytd', [{ leoka_chart_ytd: null }]);
+    const result = await runToolContract(fbiGetLeoka, { period: 'ytd', year: 2024 });
+    expectFailure(result, fbiGetLeoka, 'no_data');
+    const recovery = fbiGetLeoka.errors?.find((entry) => entry.reason === 'no_data')?.recovery;
+    expect(recovery).toContain('2020');
+    expect(recovery).not.toMatch(/lag/i);
+  });
+});
+
+describe('comparison rates (#24)', () => {
+  const comparisonInput = { ...summarizedInput, include_comparisons: true };
+  it('returns the agency state and national rates in CDE order', async () => {
+    reply('/summarized/agency/TXSPD0000/homicide', capture('agency-txspd-homicide-202401'));
+    const result = await runToolContract(fbiGetCrimeEstimates, {
+      ...comparisonInput,
+      ori: 'TXSPD0000',
+      offense: 'homicide',
+      from_year: 2024,
+      to_year: 2024,
+      to_month: 1,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      entity_name: 'San Antonio Police Department',
+      months: [{ year: 2024, month: 1, rate_per_100k: 0.53, clearance_rate_per_100k: 0.2 }],
+    });
+    expect(result.structuredContent?.comparisons).toEqual([
+      {
+        entity_name: 'Texas',
+        months: [
+          {
+            year: 2024,
+            month: 1,
+            rate_per_100k: 0.47,
+            clearance_rate_per_100k: 0.28,
+            population: 31290831,
+            participated_population: 31074446,
+            population_coverage_percent: 99.31,
+          },
+        ],
+      },
+      {
+        entity_name: 'United States',
+        months: [
+          {
+            year: 2024,
+            month: 1,
+            rate_per_100k: 0.41,
+            clearance_rate_per_100k: 0.25,
+            population: 343551384,
+            participated_population: 332363574,
+            population_coverage_percent: 96.74,
+          },
+        ],
+      },
+    ]);
+    const rendered = text(result);
+    expect(rendered).toContain('| 2024 | 01 | 0.53 | 0.2 | 8 | 3 |');
+    expect(rendered).toContain('### Comparison: Texas');
+    expect(rendered).toContain('| 2024 | 01 | 0.47 | 0.28 | 31,290,831 | 31,074,446 | 99.31% |');
+    expect(rendered).toContain('### Comparison: United States');
+    expect(rendered).toContain('| 2024 | 01 | 0.41 | 0.25 | 343,551,384 | 332,363,574 | 96.74% |');
+    expect(rendered.indexOf('Comparison: Texas')).toBeLessThan(
+      rendered.indexOf('Comparison: United States'),
+    );
+    expect(http.calls).toHaveLength(1);
+  });
+  it('carries comparison coverage while the agency coverage stays null', async () => {
+    reply('/summarized/agency/CA0010400/robbery', capture('agency'));
+    const result = await runToolContract(fbiGetCrimeEstimates, comparisonInput);
+    expect(result.structuredContent).toMatchObject({
+      months: [{ rate_per_100k: 70.42, population_coverage_percent: null }],
+      comparisons: [
+        { entity_name: 'California', months: [{ population_coverage_percent: 99.01 }] },
+        { entity_name: 'United States', months: [{ population_coverage_percent: 93.61 }] },
+      ],
+    });
+    expect(text(result)).toContain('| 2022 | 01 | 70.42 | 15.65 | 9 | 2 | 12,781 | 12,781 | — |');
+    expect(text(result)).toContain(
+      '| 2022 | 01 | 5.9 | 1.35 | 336,746,447 | 315,231,910 | 93.61% |',
+    );
+  });
+  it('returns the nation for state scope', async () => {
+    reply('/summarized/state/CA/robbery', capture('state'));
+    const result = await runToolContract(fbiGetCrimeEstimates, {
+      ...comparisonInput,
+      scope: 'state',
+      ori: undefined,
+      state_abbr: 'ca',
+    });
+    expect(result.structuredContent).toMatchObject({
+      months: [{ rate_per_100k: 10.89 }],
+      comparisons: [{ entity_name: 'United States', months: [{ rate_per_100k: 5.9 }] }],
+    });
+    expect(result.structuredContent?.comparisons).toHaveLength(1);
+    expect(text(result)).toContain('### Comparison: United States');
+    expect(text(result)).not.toContain('### Comparison: California');
+  });
+  for (const [scope, path, fixture] of [
+    ['state', '/summarized/state/CA/robbery', 'state'],
+    ['agency', '/summarized/agency/CA0010400/robbery', 'agency'],
+  ] as const) {
+    it(`include_comparisons=false keeps the default ${scope} output byte-identical`, async () => {
+      reply(path, capture(fixture));
+      const result = await runToolContract(fbiGetCrimeEstimates, {
+        ...summarizedInput,
+        scope,
+        ...(scope === 'state' && { ori: undefined, state_abbr: 'CA' }),
+        include_comparisons: false,
+      });
+      expect(JSON.stringify(result.structuredContent)).toBe(
+        JSON.stringify(PINNED[scope].structured),
+      );
+      expect(text(result)).toBe(PINNED[scope].text);
+    });
+  }
+  it('rejects include_comparisons on national scope without fetching', async () => {
+    catchAllRequests();
+    const result = await runToolContract(fbiGetCrimeEstimates, {
+      scope: 'national',
+      offense: 'robbery',
+      from_year: 2023,
+      to_year: 2023,
+      include_comparisons: true,
+    });
+    expectFailure(result, fbiGetCrimeEstimates, 'scope_param_incompatible');
+    expect(text(result)).toContain('include_comparisons');
+    expect(http.calls).toHaveLength(0);
+  });
+  it('covers exactly the scoped months, keeping nulls and zeros', async () => {
+    reply('/summarized/agency/CA0010400/robbery', {
+      offenses: {
+        actuals: { 'Agency Offenses': { '02-2022': 1, '01-2022': 0 } },
+        rates: {
+          'State Offenses': { '01-2022': 0, '03-2022': 7 },
+          'State Clearances': { '01-2022': null },
+          'Agency Offenses': { '01-2022': 0, '02-2022': 4 },
+          'Nation Offenses': { '02-2022': 2 },
+        },
+      },
+      populations: {
+        population: { State: { '01-2022': 0, '03-2022': 9 }, Nation: null },
+        participated_population: { State: { '01-2022': null } },
+      },
+      tooltips: { 'Percent of Population Coverage': { Nation: { '02-2022': 0, '03-2022': 50 } } },
+    });
+    const result = await runToolContract(fbiGetCrimeEstimates, comparisonInput);
+    expect(result.isError).not.toBe(true);
+    const nulls = {
+      rate_per_100k: null,
+      clearance_rate_per_100k: null,
+      population: null,
+      participated_population: null,
+      population_coverage_percent: null,
+    };
+    expect(result.structuredContent?.comparisons).toEqual([
+      {
+        entity_name: 'State',
+        months: [
+          { ...nulls, year: 2022, month: 1, rate_per_100k: 0, population: 0 },
+          { ...nulls, year: 2022, month: 2 },
+        ],
+      },
+      {
+        entity_name: 'Nation',
+        months: [
+          { ...nulls, year: 2022, month: 1 },
+          { ...nulls, year: 2022, month: 2, rate_per_100k: 2, population_coverage_percent: 0 },
+        ],
+      },
+    ]);
+    expect(result.structuredContent).toMatchObject({
+      months: [
+        { month: 1, rate_per_100k: 0 },
+        { month: 2, rate_per_100k: 4 },
+      ],
+    });
+    expect(text(result)).not.toContain('| 2022 | 03 |');
+    expect(text(result)).toContain('| 2022 | 02 | 2 | — | — | — | 0% |');
+  });
+  it('reports an empty comparison list when CDE sends no comparison entity', async () => {
+    reply('/summarized/agency/CA0010400/robbery', {
+      offenses: {
+        actuals: { 'Agency Offenses': { '01-2022': 3 } },
+        rates: { 'Agency Offenses': { '01-2022': 1.5 } },
+      },
+    });
+    const result = await runToolContract(fbiGetCrimeEstimates, comparisonInput);
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toHaveProperty('comparisons', []);
+    expect(text(result)).toContain('No comparison entities were returned');
+  });
+  it('fails a malformed comparison leaf as malformed upstream data', async () => {
+    reply('/summarized/agency/CA0010400/robbery', {
+      offenses: {
+        actuals: { 'Agency Offenses': { '01-2022': 3 } },
+        rates: { 'State Offenses': { '01-2022': '9' } },
+      },
+    });
+    const result = await runToolContract(fbiGetCrimeEstimates, comparisonInput);
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.SerializationError },
+    });
+    expect(text(result)).toContain('Malformed FBI');
+  });
 });

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @fileoverview fbi-crime-mcp-server MCP server entry point.
- * Exposes two FBI CDE tools and retains nine disabled operator definitions.
+ * Exposes six FBI CDE tools and retains five disabled operator definitions.
  * @module index
  */
 
@@ -29,25 +29,18 @@ await createApp({
     disabledTool(fbiListCodeTable, {
       reason: 'UCR code-table endpoint retired. Consult https://cde.ucr.cjis.gov/.',
     }),
-    disabledTool(fbiSearchAgencies, {
-      reason: 'UCR agency-search endpoint retired. Consult https://cde.ucr.cjis.gov/.',
-    }),
+    fbiSearchAgencies,
     disabledTool(fbiGetAgency, {
-      reason: 'UCR agency-profile endpoint retired. Consult https://cde.ucr.cjis.gov/.',
+      reason:
+        'UCR agency-profile endpoint retired. Use fbi_search_agencies for agency ORI, type, counties and NIBRS status, or consult https://cde.ucr.cjis.gov/.',
     }),
     disabledTool(fbiGetParticipation, {
       reason: 'UCR/CDE participation endpoints retired. Consult https://cde.ucr.cjis.gov/.',
     }),
     fbiGetCrimeEstimates,
-    disabledTool(fbiGetNibrsBreakdown, {
-      reason: 'UCR NIBRS endpoint retired. Consult https://cde.ucr.cjis.gov/.',
-    }),
-    disabledTool(fbiGetArrests, {
-      reason: 'UCR arrests endpoint retired. Consult https://cde.ucr.cjis.gov/.',
-    }),
-    disabledTool(fbiGetHateCrimes, {
-      reason: 'UCR hate-crimes endpoint retired. Consult https://cde.ucr.cjis.gov/.',
-    }),
+    fbiGetNibrsBreakdown,
+    fbiGetArrests,
+    fbiGetHateCrimes,
     disabledTool(fbiGetHumanTrafficking, {
       reason: 'UCR human-trafficking endpoint retired. Consult https://cde.ucr.cjis.gov/.',
     }),
@@ -60,10 +53,7 @@ await createApp({
   resources: [],
   prompts: [],
   instructions:
-    'FBI Crime Data Explorer MCP server (post-UCR decommission). Only CDE summarized and LEOKA endpoints are active.\n' +
-    '- Use fbi_get_crime_estimates for monthly national, state or agency offense rates/counts and provider populations/coverage. National omits identifiers; state uses only state_abbr; agency uses only ori. Coverage may be null or incomplete.\n' +
-    '- Use fbi_get_leoka for officer fatality, weapon and circumstance data. YTD omits month; monthly requires month.\n' +
-    '- Two tools are callable. Nine retired tools remain disabled on the operator landing page; no resources are registered. Consult https://cde.ucr.cjis.gov/ for other datasets.',
+    'FBI Crime Data Explorer MCP server (post-UCR decommission).\n- Use fbi_search_agencies to find an agency ORI by state, name words, county or type, then pass it as ori with scope "agency" to the scoped tools below. National scope omits identifiers; state uses only state_abbr; agency uses only ori.\n- Use fbi_get_crime_estimates for monthly offense rates/counts and provider populations/coverage; set include_comparisons for the state/national comparison rates. Coverage may be null or incomplete.\n- Use fbi_get_hate_crimes, fbi_get_arrests and fbi_get_nibrs_breakdown for category totals summed over a month window: hate crimes by bias motivation, arrests by offense and arrestee demographics, NIBRS victim/offender/offense details for one offense. All-zero hate-crime and arrest results can also mean an unrecognized state or ORI; NIBRS fails with no_data then.\n- Use fbi_get_leoka for officer fatality, weapon and circumstance data. YTD omits month; monthly requires month.\n- Years run through the current year, from 1985 (estimates, arrests), 1991 (hate crimes, NIBRS) or 2020 (LEOKA).\n- Six tools are callable. Five retired tools remain disabled on the operator landing page; no resources are registered. Consult https://cde.ucr.cjis.gov/ for other datasets.',
   setup(core) {
     const serverConfig = getServerConfig();
     initFbiApiService(core.config, core.storage, serverConfig);

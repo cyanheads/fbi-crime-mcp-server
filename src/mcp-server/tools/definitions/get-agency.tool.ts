@@ -1,7 +1,8 @@
 /**
  * @fileoverview FBI agency profile tool — currently unavailable.
  * The UCR agency profile backend (crime-data-api.fr.cloud.gov) was decommissioned.
- * No CDE replacement for individual agency lookup by ORI has been identified.
+ * fbi_search_agencies covers ORI, type, counties and NIBRS status from the CDE state directory;
+ * no CDE endpoint returns a single agency's profile by ORI.
  * @module mcp-server/tools/definitions/get-agency.tool
  */
 
@@ -11,7 +12,7 @@ import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 export const fbiGetAgency = tool('fbi_get_agency', {
   title: 'FBI Get Agency',
   description:
-    '[UNAVAILABLE] The FBI agency profile endpoint has been decommissioned. The UCR backend (crime-data-api.fr.cloud.gov) no longer responds. This tool will return an error on every call. For agency details, consult the FBI CDE website at cde.ucr.cjis.gov.',
+    "[UNAVAILABLE] The FBI agency profile endpoint has been decommissioned. The UCR backend (crime-data-api.fr.cloud.gov) no longer responds. This tool will return an error on every call. For an agency's ORI, type, counties and NIBRS status use fbi_search_agencies; for other agency details, consult the FBI CDE website at cde.ucr.cjis.gov.",
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [
