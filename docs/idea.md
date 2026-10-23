@@ -1,6 +1,6 @@
 # fbi-crime-mcp-server
 
-Historical concept inventory for FBI Crime Data Explorer. The implemented surface is `fbi_get_crime_estimates` (monthly rates, counts, populations and provider coverage) and `fbi_get_leoka`. Nine retired definitions are disabled; no resources are registered. The data categories and tool ideas below are concept references, not available capabilities. See [design.md](./design.md) for the current contracts.
+Historical concept inventory for FBI Crime Data Explorer. The implemented surface is `fbi_search_agencies` (ORI discovery from the CDE state directory), `fbi_get_crime_estimates` (monthly rates, counts, populations and provider coverage), `fbi_get_hate_crimes`, `fbi_get_arrests`, `fbi_get_nibrs_breakdown`, and `fbi_get_leoka`. Five retired definitions are disabled; no resources are registered. The data categories and tool ideas below are concept references, not available capabilities. See [design.md](./design.md) for the current contracts.
 
 ## API
 

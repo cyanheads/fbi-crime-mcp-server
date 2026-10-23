@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: fbi-crime-mcp-server
-abstract: "Model Context Protocol (MCP) server for the FBI Crime Data Explorer, providing UCR estimates, NIBRS breakdowns, hate crime statistics, arrest data, and law enforcement agency information."
+abstract: "Model Context Protocol (MCP) server for the FBI Crime Data Explorer, providing monthly offense rates and counts, NIBRS breakdowns, hate crime statistics, arrest data, LEOKA officer-safety statistics, and law enforcement agency search."
 type: software
 authors:
   - family-names: Hand
