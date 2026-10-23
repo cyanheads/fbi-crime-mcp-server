@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.cyanheads/fbi-crime-mcp-server",
-  "description": "FBI Crime Data Explorer — UCR offense rates and counts, plus LEOKA officer-safety statistics.",
+  "description": "FBI Crime Data Explorer — offense rates, hate crime, arrests, NIBRS, LEOKA stats, agency search.",
   "repository": {
     "url": "https://github.com/cyanheads/fbi-crime-mcp-server",
     "source": "github"

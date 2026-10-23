@@ -1,7 +1,7 @@
 {
   "name": "fbi-crime-mcp-server",
   "version": "0.3.0",
-  "description": "Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts by national, state, or agency scope, plus LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.",
+  "description": "Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts, hate crime, arrest, and NIBRS breakdowns by national, state, or agency scope, agency ORI search, and LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.",
   "author": {
     "name": "Casey Hand",
     "email": "casey@caseyjhand.com",
@@ -14,8 +14,8 @@
   "mcpServers": "./.codex-plugin/mcp.json",
   "interface": {
     "displayName": "fbi-crime-mcp-server",
-    "shortDescription": "Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts by national, state, or agency scope, plus LEOKA officer-safety statistics via MCP.",
-    "longDescription": "Two callable tools expose FBI Crime Data Explorer monthly offense rates, counts, population denominators and reporting coverage at national, state or agency scope, and LEOKA officer fatality trends with circumstance, demographic, timeline and weapon detail. Runs over STDIO or Streamable HTTP. Nine retired UCR tools remain disabled on the operator landing page; no resources are registered.",
+    "shortDescription": "Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts, hate crime, arrest, and NIBRS breakdowns by national, state, or agency scope, agency ORI search, and LEOKA officer-safety statistics via MCP.",
+    "longDescription": "Six callable tools expose FBI Crime Data Explorer monthly offense rates, counts, population denominators, reporting coverage and optional comparison rates at national, state or agency scope; hate crime, arrest and NIBRS totals at the same scopes; agency ORI search from the CDE state directory; and LEOKA officer fatality trends with circumstance, demographic, timeline and weapon detail. Runs over STDIO or Streamable HTTP. Five retired UCR tools remain disabled on the operator landing page; no resources are registered.",
     "developerName": "cyanheads",
     "category": "data",
     "capabilities": ["Read"],
