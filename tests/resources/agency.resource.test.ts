@@ -8,9 +8,11 @@ import { describe, expect, it } from 'vitest';
 import { agencyResource } from '@/mcp-server/resources/definitions/agency.resource.js';
 
 describe('agencyResource', () => {
+  const paramsSchema = agencyResource.params;
+  if (!paramsSchema) throw new Error('Agency resource must declare params');
   it('always throws endpoint_decommissioned for any ORI', async () => {
     const ctx = createMockContext({ tenantId: 'test-tenant' });
-    const params = agencyResource.params.parse({ ori: 'CA0010400' });
+    const params = paramsSchema.parse({ ori: 'CA0010400' });
     await expect(async () => agencyResource.handler(params, ctx)).rejects.toThrow(
       /decommissioned/i,
     );
@@ -18,7 +20,7 @@ describe('agencyResource', () => {
 
   it('throws for any ORI including unknown ones', async () => {
     const ctx = createMockContext({ tenantId: 'test-tenant' });
-    const params = agencyResource.params.parse({ ori: 'XX9999999' });
+    const params = paramsSchema.parse({ ori: 'XX9999999' });
     await expect(async () => agencyResource.handler(params, ctx)).rejects.toThrow(
       /decommissioned/i,
     );

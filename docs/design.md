@@ -148,6 +148,8 @@ Call `fbi_get_leoka` with `period="ytd"` and `year`, or `period="monthly"`, `yea
 
 **Comparisons are opt-in.** `include_comparisons` defaults to `false` because returning the comparison entities always more than doubles an agency response; callers that want the state and national rates ask for them.
 
+**Monthly pages budget both output surfaces.** The summarized tool returns the largest chronological prefix within 24,000 UTF-8 bytes of serialized `{content, structuredContent}`, including continuation and notices; SDK protocol metadata and JSON-RPC/HTTP framing are excluded. This bounds the monthly payload without rejecting valid date ranges. `next_from: { from_year, from_month }` names the first omitted scoped month; callers keep scope, identifiers, offense, comparison flag and the original end date. Comparisons are sliced with the scoped rows. Under-budget output is unchanged; `from`/`to` remain request echoes and `total_months` remains the returned count. An indivisible oversize month and its metadata are returned intact with `oversize_notice` so continuation always advances without data loss.
+
 **One scope and date contract for scoped tools.** `src/mcp-server/tools/cde-scoped-range.ts` holds the scope/identifier/year/month fields and the pre-fetch checks shared by the summarized, hate-crime, arrest, and NIBRS tools, so the four cannot drift on identifier rules, year floors, or error reasons. Each tool still declares its `errors[]` inline.
 
 **The year ceiling is checked per call.** The ceiling is the current UTC year, read on every call. A schema `maximum` would be fixed when the process starts and go stale across New Year; the floors stay in the schema as `minimum`.
@@ -240,7 +242,7 @@ Endpoint notes:
 
 ### Pagination
 
-The CDE endpoints have no server-side paging contract. `fbi_search_agencies` pages the state directory locally with `limit`, `offset`, and `next_offset` over a stable agency-name-then-ORI sort. The totals endpoints return fixed-size payloads. Legacy `page`/`per_page` inputs remain only in the disabled `fbi_get_participation` definition.
+The CDE endpoints have no server-side paging contract. `fbi_search_agencies` pages the state directory locally with `limit`, `offset`, and `next_offset` over a stable agency-name-then-ORI sort. `fbi_get_crime_estimates` bounds the monthly tool payload locally and returns `next_from` for date-based continuation. The totals endpoints return fixed-size payloads. Legacy `page`/`per_page` inputs remain only in the disabled `fbi_get_participation` definition.
 
 ### Rate limits
 

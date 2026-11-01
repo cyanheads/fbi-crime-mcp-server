@@ -8,15 +8,17 @@ import { describe, expect, it } from 'vitest';
 import { stateResource } from '@/mcp-server/resources/definitions/state.resource.js';
 
 describe('stateResource', () => {
+  const paramsSchema = stateResource.params;
+  if (!paramsSchema) throw new Error('State resource must declare params');
   it('always throws endpoint_decommissioned for any state', async () => {
     const ctx = createMockContext({ tenantId: 'test-tenant' });
-    const params = stateResource.params.parse({ state_abbr: 'CA' });
+    const params = paramsSchema.parse({ state_abbr: 'CA' });
     await expect(async () => stateResource.handler(params, ctx)).rejects.toThrow(/decommissioned/i);
   });
 
   it('throws for any state abbreviation including unknown ones', async () => {
     const ctx = createMockContext({ tenantId: 'test-tenant' });
-    const params = stateResource.params.parse({ state_abbr: 'ZZ' });
+    const params = paramsSchema.parse({ state_abbr: 'ZZ' });
     await expect(async () => stateResource.handler(params, ctx)).rejects.toThrow(/decommissioned/i);
   });
 });

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "fbi-crime-mcp-server",
+  "version": "0.4.0",
+  "description": "Exposes the FBI Crime Data Explorer API \u2014 monthly UCR offense rates and counts, hate crime, arrest, and NIBRS breakdowns by national, state, or agency scope, agency ORI search, and LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.",
+  "author": {
+    "name": "Casey Hand",
+    "email": "casey@caseyjhand.com",
+    "url": "https://caseyjhand.com"
+  },
+  "homepage": "https://github.com/cyanheads/fbi-crime-mcp-server#readme",
+  "repository": "https://github.com/cyanheads/fbi-crime-mcp-server",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "crime-data",
+    "fbi",
+    "ucr",
+    "leoka",
+    "public-safety",
+    "law-enforcement",
+    "crime-statistics",
+    "cde"
+  ]
+}

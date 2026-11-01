@@ -78,9 +78,154 @@ const ComparisonMonthSchema = z
   })
   .describe('One month of comparison rates, matching a scoped month.');
 
+const CrimeEstimatesOutputSchema = z.object({
+  scope: z.string().describe('Geographic scope.'),
+  offense: z.string().describe('Offense type queried.'),
+  entity_name: z.string().describe('Provider entity selected from scoped offense actuals.'),
+  state_abbr: z.string().optional().describe('State abbreviation when scope is "state".'),
+  ori: z.string().optional().describe('ORI code when scope is "agency".'),
+  from: z.string().describe('Start of data range (MM-YYYY).'),
+  to: z.string().describe('End of data range (MM-YYYY).'),
+  months: z
+    .array(
+      z
+        .object({
+          year: z.number().describe('Year.'),
+          month: z.number().describe('Month (1–12).'),
+          rate_per_100k: z
+            .number()
+            .nullable()
+            .optional()
+            .describe('Offense rate per 100,000 participating population.'),
+          clearance_rate_per_100k: z
+            .number()
+            .nullable()
+            .optional()
+            .describe('Clearance rate per 100,000 participating population.'),
+          actual_count: z.number().nullable().optional().describe('Raw offense count.'),
+          clearance_count: z.number().nullable().optional().describe('Raw clearance count.'),
+          population: z
+            .number()
+            .nullable()
+            .describe('Provider population for this entity and month; null when unavailable.'),
+          participated_population: z
+            .number()
+            .nullable()
+            .describe(
+              'Provider participating population for this entity and month; null when unavailable.',
+            ),
+          population_coverage_percent: z
+            .number()
+            .nullable()
+            .describe(
+              'Provider reporting coverage percentage for this entity and month; never calculated or borrowed, null when unavailable.',
+            ),
+        })
+        .describe('One month of offense data.'),
+    )
+    .describe('Monthly data rows sorted chronologically.'),
+  total_months: z.number().describe('Number of months returned.'),
+  data_last_updated: z.string().optional().describe('Date the CDE last refreshed this data.'),
+  max_data_date: z
+    .string()
+    .optional()
+    .describe('Latest data date reported by CDE, in the provider format.'),
+  comparisons: z
+    .array(
+      z
+        .object({
+          entity_name: z.string().describe('Comparison entity name as CDE labels it.'),
+          months: z
+            .array(ComparisonMonthSchema)
+            .describe('One row per scoped month, in the same order as months.'),
+        })
+        .describe('Rates, populations and coverage CDE sent for one comparison entity.'),
+    )
+    .optional()
+    .describe(
+      "Present only when include_comparisons is true: the comparison entities in CDE's order (an agency's state, then the United States; a state's United States). Empty when CDE sent none. CDE sends no counts for comparison entities.",
+    ),
+  next_from: z
+    .object({
+      from_year: z.number().int().describe('Year of the first unreturned scoped month.'),
+      from_month: z
+        .number()
+        .int()
+        .min(1)
+        .max(12)
+        .describe('Month of the first unreturned scoped month (1–12).'),
+    })
+    .optional()
+    .describe(
+      'Continue with these start fields, keeping the scope, identifiers, offense, comparison flag and original end date.',
+    ),
+  oversize_notice: z
+    .string()
+    .optional()
+    .describe(
+      'Present when one indivisible month with its metadata exceeds the 24,000-byte serialized tool-payload budget and is returned intact.',
+    ),
+});
+
+/** Render the same domain payload for returned content and byte-budget sizing. */
+function formatCrimeEstimates(result: z.infer<typeof CrimeEstimatesOutputSchema>) {
+  const rateFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+  const populationFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 20 });
+  const fmt = (v: number | null | undefined) => (v != null ? rateFormat.format(v) : '—');
+  const populationFmt = (v: number | null) => (v === null ? '—' : populationFormat.format(v));
+  const lines: string[] = [
+    `## FBI Crime Data — ${result.offense} (${scopeHeading(result)})`,
+    scopeLine(result),
+    `**Offense:** ${result.offense} | **Range:** ${result.from} → ${result.to}`,
+    `**Entity:** ${escapeMarkdown(result.entity_name)}`,
+    `**Months returned:** ${result.total_months}`,
+  ];
+  if (result.data_last_updated) lines.push(`**Data last updated:** ${result.data_last_updated}`);
+  if (result.max_data_date) lines.push(`**Max data date:** ${result.max_data_date}`);
+  if (result.next_from)
+    lines.push(
+      `**next_from:** from_year=${result.next_from.from_year}, from_month=${result.next_from.from_month}. More months remain; repeat scope, identifiers, offense, include_comparisons and the original end date with this start.`,
+    );
+  if (result.oversize_notice) lines.push(result.oversize_notice);
+  lines.push(
+    '',
+    'Reporting coverage may be incomplete or unavailable. — means unavailable; coverage is supplied by CDE, not calculated from populations.',
+    '| Year | Month | Rate/100k | Clearance Rate | Actual Count | Clearances | Population | Participating population | Population coverage |',
+    '|:-----|:-----:|----------:|---------------:|-------------:|-----------:|-----------:|-------------------------:|--------------------:|',
+  );
+  const coverageFmt = (v: number | null) => (v !== null ? `${populationFmt(v)}%` : '—');
+  for (const m of result.months) {
+    lines.push(
+      `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${m.actual_count != null ? m.actual_count.toLocaleString() : '—'} | ${m.clearance_count != null ? m.clearance_count.toLocaleString() : '—'} | ${populationFmt(m.population)} | ${populationFmt(m.participated_population)} | ${coverageFmt(m.population_coverage_percent)} |`,
+    );
+  }
+  if (result.comparisons) {
+    lines.push(
+      '',
+      result.comparisons.length === 0
+        ? 'No comparison entities were returned by CDE for this scope.'
+        : 'Comparison entities CDE sent for the same months. Rates are per 100,000 participating population; CDE sends no counts for comparison entities.',
+    );
+    for (const comparison of result.comparisons) {
+      lines.push(
+        '',
+        `### Comparison: ${escapeMarkdown(comparison.entity_name)}`,
+        '| Year | Month | Rate/100k | Clearance Rate | Population | Participating population | Population coverage |',
+        '|:-----|:-----:|----------:|---------------:|-----------:|-------------------------:|--------------------:|',
+      );
+      for (const m of comparison.months) {
+        lines.push(
+          `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${populationFmt(m.population)} | ${populationFmt(m.participated_population)} | ${coverageFmt(m.population_coverage_percent)} |`,
+        );
+      }
+    }
+  }
+  return [{ type: 'text' as const, text: lines.join('\n') }];
+}
+
 export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
   title: 'FBI Get Crime Estimates',
-  description: `Monthly offense rates (per 100,000 participating population), raw counts, population denominators and provider reporting coverage from FBI CDE, January ${FLOOR_YEAR} through the current year; current-year months past the latest data return null values. National scope omits identifiers; state requires only state_abbr; agency requires only ori. Identifiers are case-insensitive; start must be no later than end. Set include_comparisons on state or agency scope to also get the comparison rates CDE sends for the same months (an agency's state and the United States, or a state's United States). Missing coverage stays null and participation may be incomplete. Offenses: violent-crime, property-crime, robbery, burglary, larceny, motor-vehicle-theft, arson, aggravated-assault, rape, homicide.`,
+  description: `Monthly offense rates (per 100,000 participating population), raw counts, population denominators and provider reporting coverage from FBI CDE, January ${FLOOR_YEAR} through the current year; current-year months past the latest data return null values. National scope omits identifiers; state requires only state_abbr; agency requires only ori. Identifiers are case-insensitive; start must be no later than end. Set include_comparisons on state or agency scope to also get the comparison rates CDE sends for the same months (an agency's state and the United States, or a state's United States). Results use the largest chronological prefix within 24,000 UTF-8 bytes of serialized {content, structuredContent}, excluding SDK protocol metadata and transport framing; next_from supplies the next start with the same scope, identifiers, offense, comparison flag and original end date. An indivisible oversize month and its metadata are returned intact with oversize_notice. Missing coverage stays null and participation may be incomplete. Offenses: violent-crime, property-crime, robbery, burglary, larceny, motor-vehicle-theft, arson, aggravated-assault, rape, homicide.`,
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [
@@ -139,74 +284,7 @@ export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
       ),
   }),
 
-  output: z.object({
-    scope: z.string().describe('Geographic scope.'),
-    offense: z.string().describe('Offense type queried.'),
-    entity_name: z.string().describe('Provider entity selected from scoped offense actuals.'),
-    state_abbr: z.string().optional().describe('State abbreviation when scope is "state".'),
-    ori: z.string().optional().describe('ORI code when scope is "agency".'),
-    from: z.string().describe('Start of data range (MM-YYYY).'),
-    to: z.string().describe('End of data range (MM-YYYY).'),
-    months: z
-      .array(
-        z
-          .object({
-            year: z.number().describe('Year.'),
-            month: z.number().describe('Month (1–12).'),
-            rate_per_100k: z
-              .number()
-              .nullable()
-              .optional()
-              .describe('Offense rate per 100,000 participating population.'),
-            clearance_rate_per_100k: z
-              .number()
-              .nullable()
-              .optional()
-              .describe('Clearance rate per 100,000 participating population.'),
-            actual_count: z.number().nullable().optional().describe('Raw offense count.'),
-            clearance_count: z.number().nullable().optional().describe('Raw clearance count.'),
-            population: z
-              .number()
-              .nullable()
-              .describe('Provider population for this entity and month; null when unavailable.'),
-            participated_population: z
-              .number()
-              .nullable()
-              .describe(
-                'Provider participating population for this entity and month; null when unavailable.',
-              ),
-            population_coverage_percent: z
-              .number()
-              .nullable()
-              .describe(
-                'Provider reporting coverage percentage for this entity and month; never calculated or borrowed, null when unavailable.',
-              ),
-          })
-          .describe('One month of offense data.'),
-      )
-      .describe('Monthly data rows sorted chronologically.'),
-    total_months: z.number().describe('Number of months returned.'),
-    data_last_updated: z.string().optional().describe('Date the CDE last refreshed this data.'),
-    max_data_date: z
-      .string()
-      .optional()
-      .describe('Latest data date reported by CDE, in the provider format.'),
-    comparisons: z
-      .array(
-        z
-          .object({
-            entity_name: z.string().describe('Comparison entity name as CDE labels it.'),
-            months: z
-              .array(ComparisonMonthSchema)
-              .describe('One row per scoped month, in the same order as months.'),
-          })
-          .describe('Rates, populations and coverage CDE sent for one comparison entity.'),
-      )
-      .optional()
-      .describe(
-        "Present only when include_comparisons is true: the comparison entities in CDE's order (an agency's state, then the United States; a state's United States). Empty when CDE sent none. CDE sends no counts for comparison entities.",
-      ),
-  }),
+  output: CrimeEstimatesOutputSchema,
 
   async handler(input, ctx) {
     ctx.log.info('fbi_get_crime_estimates', {
@@ -323,7 +401,7 @@ export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
     const lastUpdated = data.cde_properties?.last_refresh_date?.UCR;
     const maxDataDate = data.cde_properties?.max_data_date?.UCR;
 
-    return {
+    const result = {
       scope: input.scope,
       offense: input.offense,
       entity_name: entity,
@@ -337,55 +415,53 @@ export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
       ...(maxDataDate && { max_data_date: maxDataDate }),
       ...(comparisons && { comparisons }),
     };
+
+    /** The no-enrichment framework result contains exactly these two surfaces. */
+    const sizeBytes = (value: z.infer<typeof CrimeEstimatesOutputSchema>) => {
+      const structuredContent = CrimeEstimatesOutputSchema.parse(value);
+      return new TextEncoder().encode(
+        JSON.stringify({
+          structuredContent,
+          content: formatCrimeEstimates(structuredContent),
+        }),
+      ).byteLength;
+    };
+    if (sizeBytes(result) <= 24000) return result;
+
+    const page = (count: number): z.infer<typeof CrimeEstimatesOutputSchema> => {
+      const next = months[count];
+      return {
+        ...result,
+        months: months.slice(0, count),
+        total_months: count,
+        ...(comparisons && {
+          comparisons: comparisons.map((comparison) => ({
+            ...comparison,
+            months: comparison.months.slice(0, count),
+          })),
+        }),
+        ...(next && { next_from: { from_year: next.year, from_month: next.month } }),
+      };
+    };
+    let low = 1;
+    let high = months.length - 1;
+    let best = page(1);
+    if (sizeBytes(best) > 24000) {
+      best.oversize_notice =
+        'This indivisible month and its metadata exceed the 24,000-byte serialized tool-payload budget and are returned intact.';
+      return best;
+    }
+    while (low <= high) {
+      ctx.signal.throwIfAborted();
+      const count = Math.floor((low + high) / 2);
+      const candidate = page(count);
+      if (sizeBytes(candidate) <= 24000) {
+        best = candidate;
+        low = count + 1;
+      } else high = count - 1;
+    }
+    return best;
   },
 
-  format: (result) => {
-    const fmt = (v: number | null | undefined) =>
-      v != null ? v.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—';
-    const populationFmt = (v: number | null) =>
-      v === null ? '—' : v.toLocaleString(undefined, { maximumFractionDigits: 20 });
-    const lines: string[] = [
-      `## FBI Crime Data — ${result.offense} (${scopeHeading(result)})`,
-      scopeLine(result),
-      `**Offense:** ${result.offense} | **Range:** ${result.from} → ${result.to}`,
-      `**Entity:** ${escapeMarkdown(result.entity_name)}`,
-      `**Months returned:** ${result.total_months}`,
-    ];
-    if (result.data_last_updated) lines.push(`**Data last updated:** ${result.data_last_updated}`);
-    if (result.max_data_date) lines.push(`**Max data date:** ${result.max_data_date}`);
-    lines.push(
-      '',
-      'Reporting coverage may be incomplete or unavailable. — means unavailable; coverage is supplied by CDE, not calculated from populations.',
-      '| Year | Month | Rate/100k | Clearance Rate | Actual Count | Clearances | Population | Participating population | Population coverage |',
-      '|:-----|:-----:|----------:|---------------:|-------------:|-----------:|-----------:|-------------------------:|--------------------:|',
-    );
-    const coverageFmt = (v: number | null) => (v !== null ? `${populationFmt(v)}%` : '—');
-    for (const m of result.months) {
-      lines.push(
-        `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${m.actual_count != null ? m.actual_count.toLocaleString() : '—'} | ${m.clearance_count != null ? m.clearance_count.toLocaleString() : '—'} | ${populationFmt(m.population)} | ${populationFmt(m.participated_population)} | ${coverageFmt(m.population_coverage_percent)} |`,
-      );
-    }
-    if (result.comparisons) {
-      lines.push(
-        '',
-        result.comparisons.length === 0
-          ? 'No comparison entities were returned by CDE for this scope.'
-          : 'Comparison entities CDE sent for the same months. Rates are per 100,000 participating population; CDE sends no counts for comparison entities.',
-      );
-      for (const comparison of result.comparisons) {
-        lines.push(
-          '',
-          `### Comparison: ${escapeMarkdown(comparison.entity_name)}`,
-          '| Year | Month | Rate/100k | Clearance Rate | Population | Participating population | Population coverage |',
-          '|:-----|:-----:|----------:|---------------:|-----------:|-------------------------:|--------------------:|',
-        );
-        for (const m of comparison.months) {
-          lines.push(
-            `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${populationFmt(m.population)} | ${populationFmt(m.participated_population)} | ${coverageFmt(m.population_coverage_percent)} |`,
-          );
-        }
-      }
-    }
-    return [{ type: 'text', text: lines.join('\n') }];
-  },
+  format: formatCrimeEstimates,
 });

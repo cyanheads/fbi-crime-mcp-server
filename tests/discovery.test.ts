@@ -66,7 +66,7 @@ it('serves six callable tools, no resources, and five disabled operator cards', 
     }
     expect(landing, logs).not.toBe('');
     let id = 0;
-    const rpc = async (method: string, params?: unknown) => {
+    const rpc = async (method: string, params?: Record<string, unknown>) => {
       const response = await fetch(`${origin}/mcp`, {
         method: 'POST',
         headers: {
