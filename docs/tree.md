@@ -1,6 +1,6 @@
 # fbi-crime-mcp-server - Directory Structure
 
-Generated on: 2026-10-23 05:41:06
+Generated on: 2026-11-01 03:44:52
 
 ```text
 fbi-crime-mcp-server/
@@ -40,6 +40,8 @@ fbi-crime-mcp-server/
 │   ├── add-resource/
 │   │   └── SKILL.md
 │   ├── add-service/
+│   │   └── SKILL.md
+│   ├── add-skill/
 │   │   └── SKILL.md
 │   ├── add-test/
 │   │   └── SKILL.md
@@ -170,6 +172,7 @@ fbi-crime-mcp-server/
 ├── tests/
 │   ├── fixtures/
 │   │   └── cde/
+│   │       ├── agency-ca0194200-property-1985-2026.json
 │   │       ├── agency-directory-tx.json
 │   │       ├── agency-txspd-homicide-202401.json
 │   │       ├── agency-violent-2023-az0141000.json
@@ -201,6 +204,8 @@ fbi-crime-mcp-server/
 │   ├── resources/
 │   │   ├── agency.resource.test.ts
 │   │   └── state.resource.test.ts
+│   ├── scripts/
+│   │   └── agent-doc-entries.test.ts
 │   ├── services/
 │   │   ├── cde-contract.test.ts
 │   │   └── fbi-api-service.test.ts
@@ -235,7 +240,9 @@ fbi-crime-mcp-server/
 ├── Dockerfile
 ├── LICENSE
 ├── manifest.json
+├── mcp.json
 ├── package.json
+├── plugin.json
 ├── README.md
 ├── server.json
 ├── tsconfig.build.json

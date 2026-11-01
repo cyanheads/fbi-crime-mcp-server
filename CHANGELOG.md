@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.4.1](changelog/0.4.x/0.4.1.md) — 2026-10-31
+
+Monthly crime estimates return bounded pages with date-based continuation.
+
 ## [0.4.0](changelog/0.4.x/0.4.0.md) — 2026-10-22
 
 Agency search and the hate-crime, arrest, and NIBRS tools are callable again on live CDE endpoints. Crime estimates gain opt-in state and national comparison rates, year bounds follow CDE coverage, and LEOKA monthly series drop CDE fill months.
