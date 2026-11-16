@@ -1,7 +1,7 @@
 <div align="center">
   <h1>@cyanheads/fbi-crime-mcp-server</h1>
-  <p><b>Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts, hate crime, arrest, and NIBRS breakdowns by national, state, or agency scope, agency ORI search, and LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.</b>
-  <div>6 Callable Tools • 5 Disabled Tools • 0 Registered Resources</div>
+  <p><b>Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts, hate crime, arrest, and NIBRS breakdowns by national, state, or agency scope, agency ORI search, annual law enforcement staffing, and LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.</b>
+  <div>7 Callable Tools • 5 Disabled Tools • 0 Registered Resources • 1 Skill</div>
   </p>
 </div>
 
@@ -29,7 +29,7 @@
 
 ## Overview
 
-US crime statistics from the FBI Crime Data Explorer: monthly offense rates and counts with population and reporting coverage, hate crime, arrest, and NIBRS totals at the national, state, or agency level, agency ORI search by state, and statistics on law enforcement officers killed and assaulted (LEOKA).
+US crime statistics from the FBI Crime Data Explorer: monthly offense rates and counts with population and reporting coverage, hate crime, arrest, and NIBRS totals at the national, state, or agency level, agency ORI search by state, annual law enforcement staffing (sworn officers and civilians), and statistics on law enforcement officers killed and assaulted (LEOKA).
 
 ### Tools
 
@@ -37,10 +37,11 @@ US crime statistics from the FBI Crime Data Explorer: monthly offense rates and 
 |:---|:---|
 | `fbi_search_agencies` | Find agencies in one state and their ORI codes from the CDE agency directory; filter by name words, county, and agency type; paged |
 | `fbi_get_crime_estimates` | Monthly UCR offense rates and counts by national, state, or agency scope, from the CDE summarized endpoint; optional state and national comparison rates |
-| `fbi_get_hate_crimes` | Hate crime incidents by bias motivation and category, plus offense, location, offender, and judicial-district breakdowns, 1991 through the current year |
-| `fbi_get_arrests` | Arrest counts by offense, arrestee sex and race, and age group, 1985 through the current year |
-| `fbi_get_nibrs_breakdown` | NIBRS victim, offender, weapon, and related-offense breakdowns for one offense, 1991 through the current year |
+| `fbi_get_hate_crimes` | Hate crime incidents by bias motivation and category, plus offense, location, offender, and judicial-district breakdowns, 1991 through the current year; opt-in monthly counts, rates, and reporting coverage |
+| `fbi_get_arrests` | Arrest counts by offense, arrestee sex and race, and age group, 1985 through the current year; opt-in monthly counts, rates, and reporting coverage |
+| `fbi_get_nibrs_breakdown` | NIBRS victim, offender, weapon, and related-offense breakdowns for one offense, 1991 through the current year; opt-in monthly offense and clearance counts, rates, and reporting coverage |
 | `fbi_get_leoka` | Officer fatality, weapon, and circumstance data (LEOKA) by month or year-to-date, 2020 through the current year |
+| `fbi_get_police_employees` | Annual law enforcement staffing (sworn officers and civilians by sex, employees per 1,000 people, participated population) by national, state, or agency scope, 1985 through the current year |
 | `fbi_get_arson` | [DISABLED] Use `fbi_get_crime_estimates` with `offense="arson"` |
 | `fbi_get_agency` | [DISABLED] UCR agency profile backend decommissioned; use `fbi_search_agencies` |
 | `fbi_get_human_trafficking` | [DISABLED] UCR human trafficking backend decommissioned |
@@ -49,12 +50,21 @@ US crime statistics from the FBI Crime Data Explorer: monthly offense rates and 
 
 The five unavailable entries above are disabled operator records, not callable tools. Visit [FBI CDE](https://cde.ucr.cjis.gov/) for retired datasets.
 
+### Skills
+
+| Skill | Description |
+|:---|:---|
+| [`fbi-crime-guide`](./skills/fbi-crime-guide/SKILL.md) | Gates the tool descriptions don't carry: where an agency ORI comes from, an unrecognized state or ORI versus one that reported nothing, null versus zero, which category map holds a headline total, and reporting coverage before comparing periods |
+
+Plugin installs load it from `skills/`; MCP clients that support the Skills extension read it as `skill://fbi-crime-guide/SKILL.md`. It also ships in the npm package and Docker image.
+
 ## Capability reference
 
 ### `fbi_search_agencies` <sub>tool</sub>
 
-- `state_abbr` (required, two letters, case-insensitive) selects the state directory. Optional filters run over the whole state: `name_contains` (every word must appear in the agency name, any order, case-insensitive), `county` (equals any of the agency's counties, case-insensitive), and `agency_type` (`City`, `County`, `Other State Agency`, `Other`, `State Police`, `University or College`, or `Tribal`).
-- `limit` (1–200, default 50) and `offset` (default 0) page the matches, sorted by agency name then ORI.
+- `state_abbr` (required, two letters, case-insensitive) selects the state directory. Optional filters run over the whole state: `name_contains` (every word must appear in the agency name, any order, case-insensitive), `county` (equals any of the agency's counties), and `agency_type` (`City`, `County`, `Other State Agency`, `Other`, `State Police`, `University or College`, or `Tribal`).
+- `county` ignores case, accents, spaces, periods, apostrophes, and hyphens (`St. Louis` matches `ST LOUIS`, `Doña Ana` matches `DONA ANA`). CDE lists county names without a County, Parish, or Borough suffix and keeps `CITY` on independent cities, so a name that matches no county in the state is retried without one trailing County, Parish, Borough, Census Area, Municipality, or City and Borough (`Bexar County` → `BEXAR`; `Fairfax City` stays `FAIRFAX CITY`).
+- `limit` (default 50) and `offset` (default 0) page the matches, sorted by agency name then ORI. A `limit` above 200 returns 200 agencies with a notice naming both values; with `FBI_CLAMP_LIMITS=false` the schema advertises a maximum of 200 and rejects a larger value.
 - Returns `state_abbr`, `total` (matches before paging), `offset`, `next_offset` (absent on the last page), and `agencies[]` with `ori`, `agency_name`, `agency_type`, `counties`, `is_nibrs`, and `nibrs_start_date` when CDE lists one.
 - A code CDE has no directory for (`AS`, `MP`, or an unrecognized code) returns zero agencies with a notice; an `offset` past the end returns zero agencies with a notice naming the total.
 
@@ -67,7 +77,7 @@ The five unavailable entries above are disabled operator records, not callable t
 - Returns `entity_name`, rates per 100,000 participating population, actual/clearance counts, and nullable `population`, `participated_population`, and `population_coverage_percent` for each offense month, plus `data_last_updated` and `max_data_date` when the provider supplies them.
 - `include_comparisons` (default `false`; state or agency scope only) adds `comparisons`: one entry per comparison entity in CDE's order (an agency's state, then the United States; a state's United States), each `{ entity_name, months[] }` with `year`, `month`, `rate_per_100k`, `clearance_rate_per_100k`, `population`, `participated_population`, and `population_coverage_percent` for exactly the scoped months. CDE sends no counts for comparison entities, and the list is empty when CDE sends none.
 - Typed errors: `scope_param_missing`, `scope_param_incompatible` (also `include_comparisons: true` on national scope), `year_out_of_range`, `invalid_date_range`, `no_data` (also returned for a well-formed identifier the provider doesn't know).
-- Results return the largest chronological prefix within 24,000 UTF-8 bytes of serialized `{content, structuredContent}`, including continuation fields on both surfaces; SDK protocol metadata and JSON-RPC/HTTP framing are excluded. When `next_from: { from_year, from_month }` is present, repeat the call with that start, keeping scope, identifiers, offense, `include_comparisons` and the original end date. `from`/`to` echo the requested interval and `total_months` counts returned rows. Comparison rows stay aligned. A single indivisible month and its metadata that exceed the budget are returned intact with `oversize_notice`.
+- One call returns every month of the requested window; `from`/`to` echo it and `total_months` counts its months.
 
 ---
 
@@ -76,7 +86,8 @@ The five unavailable entries above are disabled operator records, not callable t
 - `scope`, `state_abbr`, `ori`, and the `from_year`/`from_month`/`to_year`/`to_month` window follow the `fbi_get_crime_estimates` contract, with years from 1991 through the current year; counts are summed over the window.
 - `bias`: `all` (default) or one of 34 CDE bias codes (`11`–`85`, listed on the field). With a code, incidents count that motivation plus multiple-bias incidents that include it.
 - Returns `incident_section` (`bias`, `bias_category`) and `bias_section` (`offense_type`, `location_type`, `offender_race`, `offender_ethnicity`, `judicial_district`) as category-to-count maps with every category CDE sends, zeros and nulls kept. The `bias_section` dimensions are counted on different bases and do not sum to one total or to the incident count. Also `bias_label` and `data_last_updated` when supplied.
-- An all-zero result succeeds with a `notice`, since CDE returns zeros both for no reports and for an unrecognized state or ORI.
+- `include_monthly` (default `false`) adds `monthly`: one row per month of the window for the scoped entity, from CDE's monthly view (one more request, run in parallel). Each row has `year`, `month`, `incident_count`, `offense_count`, `incident_rate_per_100k`, `offense_rate_per_100k`, `population`, `participated_population`, and `population_coverage_percent`. CDE's `-1` rate becomes `null`, and a count in a month whose `participated_population` is null is not a reported zero. The window returns whole.
+- An all-zero result succeeds with a `notice`, since CDE returns zeros both for no reports and for an unrecognized state or ORI. With `include_monthly` the notice names the cause: an unrecognized state or ORI returns an empty `monthly`, while a recognized one returns its months, and when none of those months has a `participated_population` the notice says the zeros are not reported counts.
 - Typed errors: `scope_param_missing`, `scope_param_incompatible`, `year_out_of_range`, `invalid_date_range`.
 
 ---
@@ -84,8 +95,10 @@ The five unavailable entries above are disabled operator records, not callable t
 ### `fbi_get_arrests` <sub>tool</sub>
 
 - Scope, identifiers, and window as `fbi_get_hate_crimes`, with years from 1985 through the current year.
-- `offense`: `all` (default) or one of 46 CDE numeric offense codes (for example `30` Robbery, `11` Murder and Nonnegligent Homicide; listed on the field). Word slugs such as `robbery` are rejected. Code `23` (Rape - Not Specified) is excluded because CDE returns only zeros for it.
+- `offense`: `all` (default) or one of 47 CDE numeric offense codes (for example `30` Robbery, `11` Murder and Nonnegligent Homicide, `320` Suspicion; listed on the field). Word slugs such as `robbery` are rejected. Code `23` (Rape - Not Specified) is excluded because CDE returns only zeros for it.
+- A code counts only its own CDE Offense Breakdown row: `140` and `150` are their category's "(Unspecified)" row, and `50` is the whole Aggravated Assault category. For a category total use `offense: all` and read `offense_category`. Multi-code categories: Homicide `11`–`12`, Human Trafficking `101`–`102`, Prostitution `140`–`143`, Drug/Narcotic `150`–`160`, Gambling `170`–`173`, Vagrancy/Loitering `300` and `330`.
 - Returns `offense_name`, `offense_category`, `offense_breakdown`, `arrestee_sex`, `arrestee_race`, `male_arrests_by_age`, and `female_arrests_by_age` as category-to-count maps, plus `offense_label`, `data_last_updated`, and `max_data_date` when supplied. Each grouping is tallied separately, so their sums differ.
+- `include_monthly` as `fbi_get_hate_crimes`, with `arrest_count` and `rate_per_100k` in place of the hate-crime count and rate fields.
 - Same all-zero `notice` and typed errors as `fbi_get_hate_crimes`.
 
 ---
@@ -95,7 +108,8 @@ The five unavailable entries above are disabled operator records, not callable t
 - Scope, identifiers, and window as `fbi_get_hate_crimes`, with years from 1991 through the current year.
 - `offense` (required, case-insensitive): one of 71 CDE NIBRS offense codes (for example `13A` Aggravated Assault, `120` Robbery; listed on the field). There is no `all`, and `23*` (Not Specified) is excluded because CDE returns only nulls for it.
 - Returns `victim` (`age`, `sex`, `race`, `location`, `ethnicity`, `relationship`), `offender` (`age`, `sex`, `race`, `ethnicity`), and `offense_details` (`weapons`, `related_offenses`) as category-to-count maps with every category CDE sends, zeros and nulls kept, plus `offense_label`, `data_last_updated`, and `max_data_date` when supplied. Dimensions are tallied separately and do not sum to one total.
-- Typed errors: `scope_param_missing`, `scope_param_incompatible`, `year_out_of_range`, `invalid_date_range`, `no_data` (CDE has no value for any category: an unrecognized state or ORI, no NIBRS data for the window, or an offense with no reported incidents in the window; for an agency, `fbi_search_agencies` shows `is_nibrs` and `nibrs_start_date`).
+- `include_monthly` as `fbi_get_hate_crimes`, with `actual_count`, `clearance_count`, `rate_per_100k`, and `clearance_rate_per_100k` for the selected offense.
+- Typed errors: `scope_param_missing`, `scope_param_incompatible`, `year_out_of_range`, `invalid_date_range`, `no_data` (CDE has no value for any category: an unrecognized state or ORI, no NIBRS data for the window, months an agency has not submitted, or an offense with no reported incidents in the window; for an agency, `fbi_search_agencies` shows `is_nibrs` and `nibrs_start_date`, and `fbi_get_arrests` with `include_monthly` shows which months it submitted).
 
 ---
 
@@ -110,6 +124,16 @@ The five unavailable entries above are disabled operator records, not callable t
 
 ---
 
+### `fbi_get_police_employees` <sub>tool</sub>
+
+- `scope`, `state_abbr`, and `ori` follow the `fbi_get_crime_estimates` contract. `from_year` and `to_year` are whole years from 1985 through the current year (`year_out_of_range` after it, `invalid_date_range` when the start is later than the end).
+- Returns `years[]`, one row per year in ascending order: `male_officers`, `female_officers`, `male_civilians`, `female_civilians`, `employees_per_1000`, `participated_population`, and `population_coverage_percent`, each nullable, plus `data_last_updated` and `max_data_date` when supplied. CDE sends no totals; add the four counts for all employees.
+- `employees_per_1000` is CDE's published rate, passed through as sent; it can differ slightly from the four counts over `participated_population`. `population_coverage_percent` is CDE's figure at state and national scope and always `null` at agency scope.
+- A year CDE has not published, the current year until it does, keeps its row with every value `null`. When no requested year has any value, as for an unrecognized state or ORI, the call fails with `no_data`.
+- Typed errors: `scope_param_missing`, `scope_param_incompatible`, `year_out_of_range`, `invalid_date_range`, `no_data`.
+
+---
+
 ## Features
 
 Built on [`@cyanheads/mcp-ts-core`](https://github.com/cyanheads/mcp-ts-core): stdio and Streamable HTTP transports, pluggable auth (`none` / `jwt` / `oauth`), swappable storage (`in-memory`, `filesystem`, `Supabase`, `Cloudflare KV/R2/D1`), structured logging with optional OpenTelemetry tracing.
@@ -118,10 +142,11 @@ FBI CDE-specific:
 
 - CDE summarized endpoint (`/cde/summarized/`) for national, state, and per-agency offense rates and counts across 10 offense types, with opt-in state and national comparison rates
 - CDE agency directory (`/cde/agency/byStateAbbr/`) for ORI discovery by state, name, county, and agency type
-- CDE hate-crime (`/cde/hate-crime/`), arrest (`/cde/arrest/`), and NIBRS (`/cde/nibrs/`) totals at national, state, and agency scope; NIBRS covers 71 offense codes
+- CDE hate-crime (`/cde/hate-crime/`), arrest (`/cde/arrest/`), and NIBRS (`/cde/nibrs/`) totals at national, state, and agency scope; NIBRS covers 71 offense codes; opt-in monthly counts, rates, and reporting coverage from the same endpoints' `type=counts` view
 - CDE LEOKA endpoint (`/cde/leoka/`) for officer fatality, weapon, and circumstance data by month or year-to-date
+- CDE law enforcement employees endpoint (`/cde/pe/`) for annual sworn-officer and civilian staffing at national, state, and agency scope
 - `DEMO_KEY` works without registration (shared, rate-limited pool); a registered api.data.gov key raises throughput
-- Five retired tools retain disabled reasons on the HTTP landing page; MCP clients discover only the six callable tools and no resources
+- Five retired tools retain disabled reasons on the HTTP landing page; MCP clients discover only the seven callable tools and the `fbi-crime-guide` skill
 
 Agent-friendly output:
 
@@ -214,8 +239,8 @@ MCP_TRANSPORT_TYPE=http MCP_HTTP_PORT=3010 FBI_API_KEY=... bun run start:http
 
 ### Prerequisites
 
-- [Bun v1.4.0](https://bun.sh/) or higher (or Node.js v24+).
-- An [api.data.gov API key](https://api.data.gov/signup/) for the FBI CDE API. `DEMO_KEY` works for testing but is rate-limited to ~1,000 req/hr from a shared pool.
+- [Bun v1.4.4](https://bun.sh/) or higher (or Node.js v24+).
+- An [api.data.gov API key](https://api.data.gov/signup/) for the FBI CDE API. `DEMO_KEY` works for testing but is limited to 30 requests an hour and 50 a day per IP address; a registered key allows 1,000 requests an hour.
 
 ### Installation
 
@@ -251,9 +276,9 @@ All configuration is validated at startup via Zod schemas in `src/config/server-
 | Variable | Description | Default |
 |:---------|:------------|:--------|
 | `FBI_API_KEY` | **Required.** api.data.gov API key for the FBI CDE API. Use `DEMO_KEY` for limited testing. | — |
-| `FBI_API_BASE_UCR` | Override UCR base URL. | `https://api.usa.gov/crime/fbi/ucr` |
 | `FBI_API_BASE_CDE` | Override CDE base URL. | `https://api.usa.gov/crime/fbi/cde` |
-| `FBI_REQUEST_TIMEOUT_MS` | Per-request timeout in milliseconds. | `15000` |
+| `FBI_REQUEST_TIMEOUT_MS` | Timeout for each attempt of a CDE request, in milliseconds. A request's attempts and retry waits share one 50-second deadline, so a value above 50000 has no further effect. | `15000` |
+| `FBI_CLAMP_LIMITS` | Serve an `fbi_search_agencies` limit above 200 at 200 with a notice; `false` advertises maximum 200 and rejects a larger limit. | `true` |
 | `MCP_TRANSPORT_TYPE` | Transport: `stdio` or `http`. | `stdio` |
 | `MCP_HTTP_PORT` | Port for HTTP server. | `3010` |
 | `MCP_HTTP_ENDPOINT_PATH` | HTTP endpoint path. | `/mcp` |
@@ -307,11 +332,12 @@ The Dockerfile defaults to HTTP transport, stateless session mode, and logs to `
 
 | Directory | Purpose |
 |:----------|:--------|
-| `src/index.ts` | `createApp()` entry point — registers tools, resources, and inits services. |
+| `src/index.ts` | `createApp()` entry point — registers tools and the skills directory, and inits services. |
 | `src/config` | Server-specific environment variable parsing and validation with Zod. |
-| `src/mcp-server/tools` | Tool definitions (`*.tool.ts`). 6 callable tools and 5 disabled operator entries. |
+| `src/mcp-server/tools` | Tool definitions (`*.tool.ts`). 7 callable tools and 5 disabled operator entries. |
 | `src/mcp-server/resources` | Retired agency/state definitions, not registered. |
 | `src/services` | FBI CDE API service with response validation and shared retry/timeout logic. |
+| `skills/` | The published `fbi-crime-guide` skill for agents calling the tools. |
 | `tests/` | Unit and integration tests mirroring `src/`. |
 
 ## Development guide
@@ -321,7 +347,7 @@ See [`CLAUDE.md`](./CLAUDE.md) for development guidelines and architectural rule
 - Handlers throw, framework catches — no `try/catch` in tool logic
 - Use `ctx.log` for request-scoped logging, `ctx.state` for tenant-scoped storage
 - Register new tools and resources in the arrays passed to `createApp()` in `src/index.ts`
-- Active tools call the CDE API (`/cde/summarized/`, `/cde/agency/byStateAbbr/`, `/cde/hate-crime/`, `/cde/arrest/`, `/cde/nibrs/`, `/cde/leoka/`); retired definitions are wrapped with `disabledTool` and omitted from MCP registration
+- Active tools call the CDE API (`/cde/summarized/`, `/cde/agency/byStateAbbr/`, `/cde/hate-crime/`, `/cde/arrest/`, `/cde/nibrs/`, `/cde/leoka/`, `/cde/pe/`); retired definitions are wrapped with `disabledTool` and omitted from MCP registration
 - Wrap FBI API calls: validate raw → normalize to domain type → return output schema; never fabricate missing fields
 
 ## Contributing
