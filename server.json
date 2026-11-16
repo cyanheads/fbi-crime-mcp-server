@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.cyanheads/fbi-crime-mcp-server",
-  "description": "FBI Crime Data Explorer — offense rates, hate crime, arrests, NIBRS, LEOKA stats, agency search.",
+  "description": "FBI Crime Data Explorer — offense rates, hate crime, arrests, NIBRS, LEOKA, staffing, agency search.",
   "repository": {
     "url": "https://github.com/cyanheads/fbi-crime-mcp-server",
     "source": "github"
@@ -28,6 +28,13 @@
           "isRequired": true
         },
         {
+          "name": "FBI_CLAMP_LIMITS",
+          "description": "Serve an fbi_search_agencies limit above 200 at 200 with a notice. Set false to advertise maximum 200 and reject a larger limit.",
+          "format": "boolean",
+          "isRequired": false,
+          "default": "true"
+        },
+        {
           "name": "MCP_LOG_LEVEL",
           "description": "Sets the minimum log level for output (e.g., 'debug', 'info', 'warn').",
           "format": "string",
@@ -51,6 +58,13 @@
           "description": "api.data.gov API key for the FBI Crime Data Explorer. Free at https://api.data.gov/signup/.",
           "format": "string",
           "isRequired": true
+        },
+        {
+          "name": "FBI_CLAMP_LIMITS",
+          "description": "Serve an fbi_search_agencies limit above 200 at 200 with a notice. Set false to advertise maximum 200 and reject a larger limit.",
+          "format": "boolean",
+          "isRequired": false,
+          "default": "true"
         },
         {
           "name": "MCP_HTTP_HOST",

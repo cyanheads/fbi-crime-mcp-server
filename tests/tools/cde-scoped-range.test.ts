@@ -10,7 +10,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   assertYearsNotFuture,
   resolveScopedRange,
+  resolveScopedYears,
   scopedRangeFields,
+  scopeFields,
 } from '@/mcp-server/tools/cde-scoped-range.js';
 
 const errors = [
@@ -60,7 +62,19 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+/** `scopedRangeFields(1991)` as JSON Schema, both io modes, pinned byte for byte. */
+const RANGE_SCHEMA_PROPERTIES =
+  '{"scope":{"type":"string","enum":["national","state","agency"],"description":"Geographic scope: national (omit identifiers), state (only state_abbr), or agency (only ori)."},"state_abbr":{"description":"Two ASCII-letter state abbreviation (e.g. CA, DC, PR); case-insensitive. Only permitted and required for state scope.","type":"string","minLength":2,"maxLength":2,"pattern":"^[A-Za-z]{2}$"},"ori":{"description":"Nine ASCII-letter/digit ORI code (e.g. CA0010400, DCMPD0000); case-insensitive. Find an agency\'s ORI with fbi_search_agencies. Only permitted and required for agency scope.","type":"string","minLength":9,"maxLength":9,"pattern":"^[A-Za-z0-9]{9}$"},"from_year":{"type":"integer","minimum":1991,"maximum":9007199254740991,"description":"Start year of the data range (inclusive), 1991 through the current year. The API uses monthly granularity."},"from_month":{"default":1,"description":"Start month (1–12). Defaults to January.","type":"integer","minimum":1,"maximum":12},"to_year":{"type":"integer","minimum":1991,"maximum":9007199254740991,"description":"End year of the data range (inclusive), 1991 through the current year."},"to_month":{"default":12,"description":"End month (1–12). Defaults to December.","type":"integer","minimum":1,"maximum":12}}';
+const PINNED_RANGE_SCHEMA = {
+  input: `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":${RANGE_SCHEMA_PROPERTIES},"required":["scope","from_year","to_year"]}`,
+  output: `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","properties":${RANGE_SCHEMA_PROPERTIES},"required":["scope","from_year","from_month","to_year","to_month"],"additionalProperties":false}`,
+};
+
 describe('scopedRangeFields', () => {
+  it('keeps its JSON Schema byte-identical in both io modes', () => {
+    expect(JSON.stringify(z.toJSONSchema(schema, { io: 'input' }))).toBe(PINNED_RANGE_SCHEMA.input);
+    expect(JSON.stringify(z.toJSONSchema(schema))).toBe(PINNED_RANGE_SCHEMA.output);
+  });
   it('uses the floor as the minimum on both year fields', () => {
     expect(schema.safeParse({ scope: 'national', ...base, from_year: 1991 }).success).toBe(true);
     for (const field of ['from_year', 'to_year'])
@@ -141,6 +155,99 @@ describe('resolveScopedRange', () => {
     });
     expect(failure({ scope: 'national', ...late })).toMatchObject({
       data: { reason: 'year_out_of_range' },
+    });
+  });
+});
+
+describe('scopeFields', () => {
+  it('carries only the scope and identifier fields, as scopedRangeFields advertises them', () => {
+    const scopeOnly = z.toJSONSchema(z.object(scopeFields())).properties ?? {};
+    const range = z.toJSONSchema(schema).properties ?? {};
+    expect(Object.keys(scopeOnly)).toEqual(['scope', 'state_abbr', 'ori']);
+    for (const key of ['scope', 'state_abbr', 'ori']) expect(scopeOnly[key]).toEqual(range[key]);
+  });
+});
+
+describe('resolveScopedYears', () => {
+  const yearsSchema = z.object({
+    ...scopeFields(),
+    from_year: z.number().int().min(1985),
+    to_year: z.number().int().min(1985),
+  });
+  const years = { from_year: 2017, to_year: 2024 };
+  const resolveYears = (input: Record<string, unknown>) =>
+    resolveScopedYears(yearsSchema.parse(input), 1985, createMockContext({ errors }));
+  function yearsFailure(input: Record<string, unknown>): unknown {
+    try {
+      resolveYears(input);
+    } catch (error) {
+      return error;
+    }
+    throw new Error('expected resolveScopedYears to throw');
+  }
+
+  it('normalizes identifiers to uppercase and returns whole-year bounds', () => {
+    expect(resolveYears({ scope: 'national', ...years })).toEqual({
+      scope: 'national',
+      fromYear: 2017,
+      toYear: 2024,
+    });
+    expect(resolveYears({ scope: 'state', ...years, state_abbr: 'wa' })).toEqual({
+      scope: 'state',
+      stateAbbr: 'WA',
+      fromYear: 2017,
+      toYear: 2024,
+    });
+    expect(resolveYears({ scope: 'agency', ...years, ori: 'waspd0000' })).toEqual({
+      scope: 'agency',
+      ori: 'WASPD0000',
+      fromYear: 2017,
+      toYear: 2024,
+    });
+  });
+  it('accepts a single year', () => {
+    expect(resolveYears({ scope: 'national', from_year: 2024, to_year: 2024 })).toMatchObject({
+      fromYear: 2024,
+      toYear: 2024,
+    });
+  });
+  for (const [input, reason] of [
+    [{ scope: 'state' }, 'scope_param_missing'],
+    [{ scope: 'state', state_abbr: '' }, 'scope_param_missing'],
+    [{ scope: 'agency' }, 'scope_param_missing'],
+    [{ scope: 'agency', ori: '' }, 'scope_param_missing'],
+    [{ scope: 'national', state_abbr: 'WA' }, 'scope_param_incompatible'],
+    [{ scope: 'national', ori: 'WASPD0000' }, 'scope_param_incompatible'],
+    [{ scope: 'state', state_abbr: 'WA', ori: 'WASPD0000' }, 'scope_param_incompatible'],
+    [{ scope: 'agency', ori: 'WASPD0000', state_abbr: 'WA' }, 'scope_param_incompatible'],
+    [{ scope: 'national', from_year: 2024, to_year: 2020 }, 'invalid_date_range'],
+    [{ scope: 'national', from_year: 2025, to_year: 2024 }, 'invalid_date_range'],
+  ] as const) {
+    it(`fails ${reason} for ${JSON.stringify(input)}`, () => {
+      expect(yearsFailure({ ...years, ...input })).toMatchObject({ data: { reason } });
+    });
+  }
+  it('names both years when the start is later than the end', () => {
+    expect(yearsFailure({ scope: 'national', from_year: 2024, to_year: 2020 })).toMatchObject({
+      message: 'from_year 2024 is later than to_year 2020.',
+    });
+  });
+  it('checks the scope, then the ceiling, then the year order', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-16T12:00:00Z'));
+    const late = { from_year: 2027, to_year: 2026 };
+    expect(yearsFailure({ scope: 'state', ...late })).toMatchObject({
+      data: { reason: 'scope_param_missing' },
+    });
+    expect(yearsFailure({ scope: 'national', ...late, ori: 'WASPD0000' })).toMatchObject({
+      data: { reason: 'scope_param_incompatible' },
+    });
+    expect(yearsFailure({ scope: 'national', ...late })).toMatchObject({
+      message: 'from_year 2027 is after the current year (2026).',
+      data: {
+        reason: 'year_out_of_range',
+        recovery: { hint: 'Use years from 1985 through 2026.' },
+      },
     });
   });
 });

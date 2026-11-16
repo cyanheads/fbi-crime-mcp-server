@@ -7,6 +7,11 @@
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import {
+  includeMonthlyField,
+  monthlySeries,
+  totalsWithCounts,
+} from '@/mcp-server/tools/cde-monthly.js';
+import {
   type ResolvedScopedRange,
   resolveScopedRange,
   scopedRangeFields,
@@ -20,6 +25,7 @@ import {
   scopeEcho,
   scopeEchoFields,
   scopeHeading,
+  scopeLabel,
   scopeLine,
 } from '@/mcp-server/tools/cde-totals.js';
 import { getFbiApiService } from '@/services/fbi-api/fbi-api-service.js';
@@ -111,21 +117,49 @@ const OFFENSE_VALUES = Object.keys(OFFENSE_LABELS) as [OffenseCode, ...OffenseCo
 
 const { scope: scopeField, ...rangeFields } = scopedRangeFields(FLOOR_YEAR);
 
+const MONTHLY = monthlySeries({
+  counts: {
+    actual_count: {
+      series: 'Offenses',
+      header: 'Offenses',
+      description: 'Offenses of the selected NIBRS offense in the month.',
+    },
+    clearance_count: {
+      series: 'Clearances',
+      header: 'Clearances',
+      description: 'Offenses of the selected NIBRS offense cleared in the month.',
+    },
+  },
+  rates: {
+    rate_per_100k: {
+      series: 'Offenses',
+      header: 'Rate/100k',
+      description: 'Offense rate for the month.',
+    },
+    clearance_rate_per_100k: {
+      series: 'Clearances',
+      header: 'Clearance rate/100k',
+      description: 'Clearance rate for the month.',
+    },
+  },
+});
+
 /**
- * Recovery for an all-null payload. CDE sends all nulls for an unrecognized identifier and for an
- * offense with no reported incidents in the window, so the hint covers both: identifier first.
+ * Recovery for an all-null payload. CDE sends all nulls for an unrecognized identifier, for an
+ * offense with no reported incidents in the window, for a window after its latest data month, and
+ * for months an agency has not submitted, so no hint reads the nulls as no incidents.
  */
 function noDataHint(range: ResolvedScopedRange): string {
   if (range.scope === 'agency')
-    return 'Confirm the ORI with fbi_search_agencies, which also shows whether the agency reports to NIBRS (is_nibrs) and since when (nibrs_start_date). If it reported throughout this window, it recorded no incidents of this offense; otherwise request a window after that date.';
+    return 'Confirm the ORI with fbi_search_agencies, which also shows whether the agency reports to NIBRS (is_nibrs) and since when (nibrs_start_date); request a window after that date. CDE also returns no values for months the agency has not submitted, often the latest ones, so before reading this as no incidents of this offense, check with fbi_get_arrests and include_monthly that every month of the window has a participated_population.';
   if (range.scope === 'state')
-    return 'Confirm state_abbr is a US state or territory abbreviation. A valid state with no reported incidents of this offense in the window also returns no values; try a later or wider window.';
-  return 'No incidents of this offense were reported to NIBRS nationally in the requested window; try a later or wider window.';
+    return "Confirm state_abbr is a US state or territory abbreviation. A valid state also returns no values for a window with no reported incidents of this offense, or one after CDE's latest data month (named in the message when CDE reports it); try a wider window that ends by that month.";
+  return 'CDE returns no values nationally for a window with no reported incidents of this offense, or one after its latest data month (named in the message when CDE reports it); try a wider window that ends by that month.';
 }
 
 export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
   title: 'FBI Get NIBRS Breakdown',
-  description: `NIBRS incident breakdowns reported to FBI CDE for one offense, for the nation, a state, or an agency, summed over a month window from January ${FLOOR_YEAR} through the current year. Returns victim counts by age, sex, race, location, ethnicity, and relationship to the offender; offender counts by age, sex, race, and ethnicity; and offense counts by weapon and related offense, with every category CDE reports, zeros included. Each dimension is tallied separately and their sums can differ, so no dimension stands in for another's total. offense is required (codes are listed on the field). National scope omits identifiers; state requires only state_abbr; agency requires only ori (look it up with fbi_search_agencies). When CDE has no value for any category, as for an unrecognized state or ORI, a window with no NIBRS data, or an offense with no reported incidents in the window, the call fails with no_data.`,
+  description: `NIBRS incident breakdowns reported to FBI CDE for one offense, for the nation, a state, or an agency, summed over a month window from January ${FLOOR_YEAR} through the current year. Returns victim counts by age, sex, race, location, ethnicity, and relationship to the offender; offender counts by age, sex, race, and ethnicity; and offense counts by weapon and related offense, with every category CDE reports, zeros included. Each dimension is tallied separately and their sums can differ, so no dimension stands in for another's total. offense is required (codes are listed on the field). National scope omits identifiers; state requires only state_abbr; agency requires only ori (look it up with fbi_search_agencies). When CDE has no value for any category, as for an unrecognized state or ORI, a window with no NIBRS data, or an offense with no reported incidents in the window, the call fails with no_data. Set include_monthly for month-by-month offense and clearance counts and rates with population and reporting coverage; a month with no participating population, as before an agency's NIBRS start, is not a reported zero.`,
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [
@@ -163,9 +197,9 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
     {
       reason: 'no_data',
       code: JsonRpcErrorCode.NotFound,
-      when: 'CDE returned no value for any category: an unrecognized state or ORI, no NIBRS data for the window, or no reported incidents of the offense in the window.',
+      when: "CDE returned no value for any category: an unrecognized state or ORI, no NIBRS data for the window, a window after CDE's latest data month, months an agency has not submitted, or no reported incidents of the offense in the window.",
       recovery:
-        'Confirm the identifier first (the ORI and its NIBRS start date with fbi_search_agencies, or state_abbr), then try a later or wider window.',
+        "Confirm the identifier first (the ORI and its NIBRS start date with fbi_search_agencies, or state_abbr), then try a wider window that ends by CDE's latest data month; for an agency, check with fbi_get_arrests and include_monthly which months it submitted.",
     },
   ],
 
@@ -180,6 +214,7 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
         `NIBRS offense code to break down (required; case-insensitive). Codes: ${codeListing(OFFENSE_LABELS)}.`,
       ),
     ...rangeFields,
+    include_monthly: includeMonthlyField,
   }),
 
   output: z.object({
@@ -218,6 +253,7 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
       .string()
       .optional()
       .describe('Latest data month CDE reports (MM/YYYY); absent when CDE omits it.'),
+    monthly: MONTHLY.field,
   }),
 
   async handler(input, ctx) {
@@ -226,9 +262,16 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
       offense: input.offense,
       state_abbr: input.state_abbr,
       ori: input.ori,
+      include_monthly: input.include_monthly,
     });
     const range = resolveScopedRange(input, FLOOR_YEAR, ctx);
-    const data = await getFbiApiService().getNibrsTotals(range, input.offense, ctx);
+    const service = getFbiApiService();
+    const [data, counts] = await totalsWithCounts(
+      ctx,
+      input.include_monthly,
+      (shared) => service.getNibrsTotals(range, input.offense, shared),
+      (shared) => service.getCounts('nibrs', range, input.offense, shared),
+    );
     const { victim, offender, offense } = data;
     const maxDataDate = data.cde_properties?.max_data_date?.UCR;
 
@@ -239,15 +282,9 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
         ...Object.values(offense),
       ])
     ) {
-      const where =
-        range.scope === 'agency'
-          ? `agency ${range.ori}`
-          : range.scope === 'state'
-            ? `state ${range.stateAbbr}`
-            : 'the nation';
       throw ctx.fail(
         'no_data',
-        `CDE has no NIBRS data for offense ${input.offense} (${OFFENSE_LABELS[input.offense]}) for ${where}, ${range.from} to ${range.to}${maxDataDate ? `; its data runs through ${maxDataDate}` : ''}.`,
+        `CDE has no NIBRS data for offense ${input.offense} (${OFFENSE_LABELS[input.offense]}) for ${scopeLabel(range)}, ${range.from} to ${range.to}${maxDataDate ? `; its data runs through ${maxDataDate}` : ''}.`,
         { recovery: { hint: noDataHint(range) } },
       );
     }
@@ -261,6 +298,7 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
       offense_details: offense,
       ...(lastUpdated && { data_last_updated: lastUpdated }),
       ...(maxDataDate && { max_data_date: maxDataDate }),
+      ...(counts && { monthly: MONTHLY.rows(counts) ?? [] }),
     };
   },
 
@@ -289,6 +327,7 @@ export const fbiGetNibrsBreakdown = tool('fbi_get_nibrs_breakdown', {
       ...countTable('Weapons', details.weapons),
       ...countTable('Related offenses', details.related_offenses),
     );
+    if (result.monthly) lines.push(...MONTHLY.table(result.monthly));
     return [{ type: 'text', text: lines.join('\n') }];
   },
 });

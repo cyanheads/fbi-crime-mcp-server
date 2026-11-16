@@ -1,13 +1,14 @@
 /**
  * @fileoverview Shared output pieces for CDE `type=totals` breakdown tools: the scope/window echo,
- * category-count map schemas, markdown count tables, the all-zero and all-null checks, the all-zero
- * notice, and the code-to-label listing that makes an opaque selector enum readable in its
- * description.
+ * category-count map schemas, markdown count tables and number cells, the all-zero and all-null
+ * checks, the all-zero notice, and the code-to-label listing that makes an opaque selector enum
+ * readable in its description.
  * @module mcp-server/tools/cde-totals
  */
 
 import { z } from '@cyanheads/mcp-ts-core';
 import type { ResolvedScopedRange } from '@/mcp-server/tools/cde-scoped-range.js';
+import type { CdeScope } from '@/services/fbi-api/types.js';
 
 /** Category label to count; null means CDE sent no value, never zero. */
 export type CountMap = Record<string, number | null>;
@@ -45,6 +46,23 @@ export function codeListing(labels: Readonly<Record<string, string>>): string {
   return Object.entries(labels)
     .map(([code, label]) => `${code} ${label}`)
     .join('; ');
+}
+
+/** Every number as CDE sent it, grouped in en-US whatever the host locale. */
+const NUMBER = new Intl.NumberFormat('en-US', { maximumFractionDigits: 20 });
+
+/** A table cell for a number CDE may not have sent: en-US digits, or `—` for null. */
+export const formatNumber = (value: number | null) => (value === null ? '—' : NUMBER.format(value));
+
+/** {@link formatNumber} for a percentage. */
+export const formatPercent = (value: number | null) =>
+  value === null ? '—' : `${NUMBER.format(value)}%`;
+
+/** `the nation`, `state TX`, or `agency CA0010400`, for no-data messages. */
+export function scopeLabel(range: CdeScope): string {
+  if (range.scope === 'agency') return `agency ${range.ori}`;
+  if (range.scope === 'state') return `state ${range.stateAbbr}`;
+  return 'the nation';
 }
 
 /** Escape CDE-authored text for markdown; structured output keeps it verbatim. */
@@ -102,11 +120,37 @@ export function allCountsNull(maps: readonly CountMap[]): boolean {
   return everyCountIs(maps, null);
 }
 
-/** Notice for an all-zero payload; below national scope, zeros also mean an unknown identifier. */
-export function zeroCountsNotice(scope: ResolvedScopedRange['scope']): string {
-  if (scope === 'agency')
+/**
+ * What CDE's `type=counts` view says about the scoped state or ORI: `unchecked` when the counts
+ * view was not requested, `unrecognized` when it names no series for the identifier, `unreported`
+ * when it names one but no month of the window has a participating population.
+ */
+export type IdentifierCheck = 'unchecked' | 'recognized' | 'unreported' | 'unrecognized';
+
+/**
+ * Notice for an all-zero payload. Below national scope the totals view alone cannot tell no
+ * reports from an unknown identifier; the counts view's {@link IdentifierCheck} settles it.
+ */
+export function zeroCountsNotice(
+  scope: ResolvedScopedRange['scope'],
+  check: IdentifierCheck,
+): string {
+  if (scope === 'national')
+    return 'Every count is zero: CDE reported none for this selection and window.';
+  if (scope === 'agency') {
+    if (check === 'unreported')
+      return 'Every count is zero, but these are not reported counts: CDE recognizes the ORI, and the agency reported for no month of this window (participated_population is null in every monthly row).';
+    if (check === 'recognized')
+      return 'Every count is zero, and CDE recognizes the ORI: the agency reported none for this selection and window. A month in monthly whose participated_population is null is one the agency did not report, not a reported zero.';
+    if (check === 'unrecognized')
+      return 'Every count is zero because CDE does not recognize the ORI: its monthly view names no agency for it. Confirm the ORI with fbi_search_agencies.';
     return 'Every count is zero. CDE returns zeros both when the agency reported nothing for this window and when it does not recognize the ORI; confirm the ORI with fbi_search_agencies.';
-  if (scope === 'state')
-    return 'Every count is zero. CDE returns zeros both when nothing was reported for this window and when it does not recognize the state code; confirm state_abbr is a US state or territory abbreviation.';
-  return 'Every count is zero: CDE reported none for this selection and window.';
+  }
+  if (check === 'unreported')
+    return 'Every count is zero, but these are not reported counts: CDE recognizes the state, and no agency in it reported for any month of this window (participated_population is null in every monthly row).';
+  if (check === 'recognized')
+    return 'Every count is zero, and CDE recognizes the state: none was reported for this selection and window. A month in monthly whose participated_population is null had no reporting agencies, not a reported zero.';
+  if (check === 'unrecognized')
+    return 'Every count is zero because CDE does not recognize the state code: its monthly view names no state for it. Confirm state_abbr is a US state or territory abbreviation.';
+  return 'Every count is zero. CDE returns zeros both when nothing was reported for this window and when it does not recognize the state code; confirm state_abbr is a US state or territory abbreviation.';
 }

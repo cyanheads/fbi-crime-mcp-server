@@ -89,7 +89,6 @@ beforeEach(() => {
   http.install();
   initFbiApiService(parseConfig(), createInMemoryStorage(), {
     apiKey: 'TEST_KEY',
-    baseUrlUcr: origin,
     baseUrlCde: origin,
     requestTimeoutMs: 15000,
   });
@@ -109,10 +108,38 @@ function reply(path: string, payload: unknown): void {
   });
 }
 
+/** Answer one CDE path for one view (`totals` or `counts`). */
+function replyView(path: string, view: 'totals' | 'counts', payload: unknown): void {
+  http.route({
+    match: (request) => {
+      const url = new URL(request.url);
+      return (
+        url.origin === origin && url.pathname === path && url.searchParams.get('type') === view
+      );
+    },
+    respond: Response.json(payload),
+  });
+}
+
+function fixture(name: string): unknown {
+  return JSON.parse(readFileSync(new URL(`../fixtures/cde/${name}.json`, import.meta.url), 'utf8'));
+}
+
 function requestUrl(): URL {
   const call = http.calls[0];
   if (!call) throw new Error('no fetch was made');
   return new URL(call.request.url);
+}
+
+/** Every request made, as `path?type&from&to`, sorted. */
+function requests(): string[] {
+  return http.calls
+    .map((call) => {
+      const url = new URL(call.request.url);
+      const query = ['type', 'from', 'to'].map((key) => url.searchParams.get(key)).join('&');
+      return `${url.pathname}?${query}`;
+    })
+    .sort();
 }
 
 function expectReason(result: Result, reason: string, code: number): void {
@@ -422,6 +449,186 @@ describe('fbi_get_nibrs_breakdown input contract', () => {
   });
 });
 
+describe('fbi_get_nibrs_breakdown include_monthly', () => {
+  type MonthlyRow = Record<string, number | null>;
+  const monthlyOf = (result: Result) =>
+    (result.structuredContent as { monthly?: MonthlyRow[] }).monthly ?? [];
+  const sum = (rows: MonthlyRow[], field: string) =>
+    rows.reduce((total, row) => total + (row[field] ?? 0), 0);
+  const sapd = '/nibrs/agency/TXSPD0000';
+
+  it('omitted returns no monthly', async () => {
+    reply('/nibrs/national/13A', capture('nibrs-national-13a-2023'));
+    const result = await runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'national',
+      offense: '13A',
+      ...year2023,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(requests()).toEqual(['/nibrs/national/13A?totals&01-2023&12-2023']);
+    expect(result.structuredContent).not.toHaveProperty('monthly');
+  });
+
+  it('true adds the offense and clearance counts the totals view lacks', async () => {
+    replyView(`${sapd}/23C`, 'totals', capture('nibrs-agency-txspd0000-23c-2024'));
+    replyView(`${sapd}/23C`, 'counts', fixture('counts-nibrs-agency-txspd0000-23c-2024'));
+    const result = await runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'agency',
+      ori: 'TXSPD0000',
+      offense: '23C',
+      include_monthly: true,
+      from_year: 2024,
+      to_year: 2024,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(requests()).toEqual([
+      `${sapd}/23C?counts&01-2024&12-2024`,
+      `${sapd}/23C?totals&01-2024&12-2024`,
+    ]);
+    const monthly = monthlyOf(result);
+    expect(monthly).toHaveLength(12);
+    expect(sum(monthly, 'actual_count')).toBe(13295);
+    expect(sum(monthly, 'clearance_count')).toBe(3053);
+    expect(monthly[2]).toEqual({
+      year: 2024,
+      month: 3,
+      actual_count: 1072,
+      clearance_count: 271,
+      rate_per_100k: 70.78,
+      clearance_rate_per_100k: 17.89,
+      population: 1514458,
+      participated_population: 1514458,
+      population_coverage_percent: null,
+    });
+    const body = text(result);
+    expect(body.split('\n').filter((line) => line.startsWith('### '))).toEqual([
+      ...TABLES.map(([, , heading]) => `### ${heading}`),
+      '### Monthly counts',
+    ]);
+    expect(body).toContain(
+      '| 2024 | 03 | 1,072 | 271 | 70.78 | 17.89 | 1,514,458 | 1,514,458 | — |',
+    );
+  });
+
+  it("marks the months before an agency's NIBRS start: -1 rates null, populations null", async () => {
+    replyView(`${sapd}/13A`, 'totals', fixture('nibrs-agency-txspd0000-13a-2020'));
+    replyView(`${sapd}/13A`, 'counts', fixture('counts-nibrs-agency-txspd0000-13a-2020'));
+    const result = await runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'agency',
+      ori: 'TXSPD0000',
+      offense: '13A',
+      include_monthly: true,
+      from_year: 2020,
+      to_year: 2020,
+    });
+    expect(result.isError).not.toBe(true);
+    // The totals view sums 1,169 victims with no sign they all fall in November and December.
+    expect(result.structuredContent).toMatchObject({
+      victim: { sex: { Male: 633, Female: 523, Unknown: 13 } },
+    });
+    const monthly = monthlyOf(result);
+    expect(monthly.slice(0, 10).every((row) => row.actual_count === 0)).toBe(true);
+    expect(monthly.slice(10).map((row) => row.actual_count)).toEqual([621, 548]);
+    expect(monthly.filter((row) => row.rate_per_100k === null)).toHaveLength(9);
+    expect(monthly.filter((row) => row.participated_population === null)).toHaveLength(9);
+    expect(monthly[7]).toMatchObject({
+      month: 8,
+      rate_per_100k: 0,
+      participated_population: 1573189,
+    });
+    expect(text(result)).toContain('| 2020 | 01 | 0 | 0 | — | — | 1,573,189 | — | — |');
+    expect(text(result)).not.toContain('| -1 |');
+  });
+
+  it('an all-null totals payload still fails no_data with include_monthly', async () => {
+    replyView('/nibrs/agency/QQ0000000/13A', 'totals', capture('nibrs-agency-unknown-13a-2023'));
+    replyView(
+      '/nibrs/agency/QQ0000000/13A',
+      'counts',
+      fixture('counts-nibrs-agency-unknown-13a-2023'),
+    );
+    const result = await runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'agency',
+      ori: 'QQ0000000',
+      offense: '13A',
+      include_monthly: true,
+      ...year2023,
+    });
+    expectReason(result, 'no_data', JsonRpcErrorCode.NotFound);
+  });
+
+  it('returns an empty monthly, said in text, when the counts view names no series', async () => {
+    replyView(`${sapd}/13A`, 'totals', capture('nibrs-agency-txspd0000-13a-2023'));
+    replyView(`${sapd}/13A`, 'counts', fixture('counts-nibrs-agency-unknown-13a-2023'));
+    const result = await runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'agency',
+      ori: 'TXSPD0000',
+      offense: '13A',
+      include_monthly: true,
+      ...year2023,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      victim: { sex: { Male: 3986, Female: 2949 } },
+      monthly: [],
+    });
+    expect(text(result)).toMatch(
+      /### Monthly counts\nCDE sent no monthly series for this state or ORI\./,
+    );
+  });
+
+  it('fails a counts payload without its offenses series as malformed upstream data', async () => {
+    replyView('/nibrs/national/13A', 'totals', capture('nibrs-national-13a-2023'));
+    replyView('/nibrs/national/13A', 'counts', { populations: null });
+    const result = await runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'national',
+      offense: '13A',
+      include_monthly: true,
+      ...year2023,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.SerializationError },
+    });
+    expect(text(result)).toContain('Malformed FBI nibrs counts response');
+  });
+
+  it('a totals 404 stops the counts leg mid-retry and surfaces the 404', async () => {
+    vi.useFakeTimers();
+    for (const [view, status] of [
+      ['totals', 404],
+      ['counts', 500],
+    ] as const) {
+      http.route({
+        match: (request) => {
+          const url = new URL(request.url);
+          return (
+            url.origin === origin &&
+            url.pathname === '/nibrs/national/13A' &&
+            url.searchParams.get('type') === view
+          );
+        },
+        respond: new Response('upstream text', { status }),
+      });
+    }
+    const pending = runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'national',
+      offense: '13A',
+      include_monthly: true,
+      ...year2023,
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    const result = await pending;
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.NotFound, data: { status: 404 } },
+    });
+    expect(requests()).toEqual([
+      '/nibrs/national/13A?counts&01-2023&12-2023',
+      '/nibrs/national/13A?totals&01-2023&12-2023',
+    ]);
+  });
+});
+
 describe('fbi_get_nibrs_breakdown nulls, zeros, and malformed payloads', () => {
   it('an all-null agency payload fails no_data, pointing to fbi_search_agencies first', async () => {
     reply('/nibrs/agency/ZZ0000000/13A', capture('nibrs-agency-unknown-13a-2023'));
@@ -463,6 +670,29 @@ describe('fbi_get_nibrs_breakdown nulls, zeros, and malformed payloads', () => {
     expect(text(result)).toContain('no incidents of this offense');
   });
 
+  it('an agency no_data never asserts no incidents: unsubmitted months return the same nulls', async () => {
+    // Live 2026-11-16: TXSPD0000 (NIBRS since 2020-11-01) 13A for 11-2026 returns the all-null
+    // shape, while its arrest monthly rows show November not yet submitted.
+    reply('/nibrs/agency/TXSPD0000/13A', capture('nibrs-agency-unknown-13a-2023'));
+    const result = await runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'agency',
+      ori: 'TXSPD0000',
+      offense: '13A',
+      from_year: 2026,
+      from_month: 11,
+      to_year: 2026,
+      to_month: 11,
+    });
+    expectReason(result, 'no_data', JsonRpcErrorCode.NotFound);
+    const hint = (result.structuredContent as { error: { data: { recovery: { hint: string } } } })
+      .error.data.recovery.hint;
+    expect(hint).not.toContain('it recorded no incidents');
+    expect(hint).toContain('not submitted');
+    expect(hint).toContain('fbi_get_arrests');
+    expect(hint).toContain('include_monthly');
+    expect(text(result)).toContain(hint);
+  });
+
   it('an all-null state payload points to state_abbr, not the agency directory', async () => {
     const payload = filled(capture('nibrs-state-tx-13a-2023'), null);
     reply('/nibrs/state/ZZ/13A', payload);
@@ -493,10 +723,32 @@ describe('fbi_get_nibrs_breakdown nulls, zeros, and malformed payloads', () => {
       'CDE has no NIBRS data for offense 13A (Aggravated Assault) for the nation, 01-2023 to 12-2023.',
     );
     expect(text(result)).not.toContain('its data runs through');
-    expect(text(result)).toContain('try a later or wider window');
-    expect(text(result)).toContain('No incidents of this offense were reported');
+    expect(text(result)).toContain('try a wider window that ends by that month');
+    expect(text(result)).toContain('no reported incidents of this offense');
     expect(text(result)).not.toContain('fbi_search_agencies');
     expect(text(result)).not.toContain('state_abbr');
+  });
+
+  it('a window after the latest CDE data month is not read as no incidents, nor advised to move later', async () => {
+    // Live 2026-11-16: national 13A for 12-2026 returns the all-null shape while CDE's data runs
+    // through 11/2026. The fixture's data runs through 10/2026.
+    reply('/nibrs/national/13A', capture('nibrs-agency-unknown-13a-2023'));
+    const result = await runToolContract(fbiGetNibrsBreakdown, {
+      scope: 'national',
+      offense: '13A',
+      from_year: 2026,
+      from_month: 11,
+      to_year: 2026,
+      to_month: 12,
+    });
+    expectReason(result, 'no_data', JsonRpcErrorCode.NotFound);
+    const hint = (result.structuredContent as { error: { data: { recovery: { hint: string } } } })
+      .error.data.recovery.hint;
+    expect(text(result)).toContain('11-2026 to 12-2026; its data runs through 10/2026.');
+    expect(hint).toContain('after its latest data month');
+    expect(hint).not.toContain('later');
+    expect(hint).not.toContain('were reported');
+    expect(text(result)).toContain(hint);
   });
 
   it('a partly-null payload is data: nulls relayed as null and rendered as unavailable', async () => {

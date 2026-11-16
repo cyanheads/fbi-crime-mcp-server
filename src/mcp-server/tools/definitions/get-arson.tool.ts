@@ -11,7 +11,7 @@ import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 export const fbiGetArson = tool('fbi_get_arson', {
   title: 'FBI Get Arson',
   description:
-    '[UNAVAILABLE — use fbi_get_crime_estimates] The dedicated UCR arson endpoint has been decommissioned. However, arson data IS available via fbi_get_crime_estimates with offense="arson" and scope="national" or scope="state". That endpoint returns monthly rates and counts from the CDE summarized API.',
+    '[UNAVAILABLE — use fbi_get_crime_estimates] The dedicated UCR arson endpoint has been decommissioned. However, arson data IS available via fbi_get_crime_estimates with offense="arson" at scope="national", "state", or "agency". That endpoint returns monthly rates and counts from the CDE summarized API.',
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [

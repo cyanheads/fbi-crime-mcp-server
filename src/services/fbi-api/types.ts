@@ -111,15 +111,14 @@ export const FbiSummarizedResponseSchema = z.object({
 /** Summarized data with nullable scoped actuals and rates represented explicitly. */
 export type FbiSummarizedResponse = z.infer<typeof FbiSummarizedResponseSchema>;
 
-/**
- * Scope and MM-YYYY window for a CDE `{endpoint}/{scope}/{selector}` request. The identifier is
- * sent as given, so callers pass it uppercased.
- */
-export type CdeScopedWindow = { from: string; to: string } & (
+/** A CDE scope with its identifier, sent as given, so callers pass it uppercased. */
+export type CdeScope =
   | { scope: 'national' }
   | { scope: 'state'; stateAbbr: string }
-  | { scope: 'agency'; ori: string }
-);
+  | { scope: 'agency'; ori: string };
+
+/** Scope and MM-YYYY window for a CDE `{endpoint}/{scope}/{selector}` request. */
+export type CdeScopedWindow = CdeScope & { from: string; to: string };
 
 /** `last_refresh_date` / `max_data_date` maps CDE keys by source system (`UCR`). */
 const CdeDateMapSchema = z.record(z.string(), z.string());
@@ -198,6 +197,22 @@ export const FbiNibrsTotalsSchema = z.object({
 export type FbiNibrsTotals = z.infer<typeof FbiNibrsTotalsSchema>;
 
 /**
+ * `GET /{hate-crime|arrest}/{scope}/{selector}?type=counts`: one month series per
+ * `{Entity} {Series}` key (hate crime `Incidents` and `Offenses`, arrest `Arrests`), then MM-YYYY
+ * keys in string order, beside the `/summarized` populations and coverage tooltip. `actuals` names
+ * only the scoped entity and is null when CDE does not recognize the state or ORI; `rates`,
+ * `populations`, and the tooltip also name comparison entities. A rate of -1 marks a month with no
+ * participating population. NIBRS nests the same series under `offenses`, the `/summarized`
+ * shape, and the service lifts them to this one.
+ */
+export const FbiMonthlyCountsSchema = FbiSummarizedResponseSchema.omit({ offenses: true }).extend({
+  rates: NestedCountMapSchema.nullish(),
+  actuals: NestedCountMapSchema.nullable(),
+});
+
+export type FbiMonthlyCounts = z.infer<typeof FbiMonthlyCountsSchema>;
+
+/**
  * One agency in the CDE state directory. Every captured record carries these fields;
  * `nibrs_start_date` is null exactly when `is_nibrs` is false. Coordinates and the
  * per-state constants (`state_abbr`, `state_name`) are dropped.
@@ -224,3 +239,40 @@ export const FbiAgencyDirectoryResponseSchema = z.union([
   z.object({ cde_agencies_query: z.object({ counties: z.null() }) }),
   z.record(z.string(), z.array(FbiDirectoryAgencySchema)),
 ]);
+
+/** Scope and inclusive whole-year window for an annual CDE series such as `GET /pe`. */
+export type CdeYearWindow = CdeScope & { fromYear: number; toYear: number };
+
+/** Four-digit year to value; null means CDE sent no value, never zero. */
+const YearSeriesSchema = z.record(z.string().regex(/^\d{4}$/), z.number().nullable());
+
+/**
+ * `GET /pe`, `/pe/{STATE}` and `/pe/agency/{ORI}` (Law Enforcement Employees): one year-keyed
+ * series per measure, no totals. Coverage is keyed by the one entity a state or national response
+ * names (`Washington`, `United States`); agency scope sends `tooltips: null`, and an unknown state
+ * a null coverage entry. An unknown identifier or a year CDE has not published returns the same
+ * shape with every value null; a reversed window nulls the sections.
+ */
+export const FbiPoliceEmployeesSchema = z.object({
+  rates: z.object({ 'Law Enforcement Employees per 1,000 People': YearSeriesSchema }).nullable(),
+  actuals: z
+    .object({
+      'Male Officers': YearSeriesSchema,
+      'Female Officers': YearSeriesSchema,
+      'Male Civilians': YearSeriesSchema,
+      'Female Civilians': YearSeriesSchema,
+    })
+    .nullable(),
+  tooltips: z
+    .object({
+      'Percent of Population Coverage': z
+        .record(z.string(), YearSeriesSchema)
+        .refine((entities) => Object.keys(entities).length <= 1)
+        .nullable(),
+    })
+    .nullable(),
+  populations: z.object({ 'Participated Population': YearSeriesSchema }).nullable(),
+  cde_properties: CdePropertiesSchema,
+});
+
+export type FbiPoliceEmployees = z.infer<typeof FbiPoliceEmployeesSchema>;

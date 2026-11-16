@@ -22,6 +22,14 @@ vi.mock('@/services/fbi-api/fbi-api-service.js', () => ({
   }),
 }));
 
+/** The text blocks of a tool result, joined as one rendering. */
+function rendered(result: Awaited<ReturnType<typeof runToolContract>>): string {
+  return result.content
+    .filter((block) => block.type === 'text')
+    .map((block) => block.text)
+    .join('\n');
+}
+
 /** FbiSummarizedResponse with monthly data for violent-crime national. */
 const mockNationalResponse = {
   cde_properties: {
@@ -121,139 +129,141 @@ describe('fbiGetCrimeEstimates', () => {
     expect(jan?.actual_count).toBe(102500);
   });
 
-  it('bounds the complete captured long agency result, including both surfaces and continuation', async () => {
-    const captured = FbiSummarizedResponseSchema.parse(
-      JSON.parse(
-        readFileSync(
-          new URL('../fixtures/cde/agency-ca0194200-property-1985-2026.json', import.meta.url),
-          'utf8',
+  it.each([true, false])(
+    'returns all 504 captured months in one call on both surfaces, include_comparisons=%s',
+    async (include_comparisons) => {
+      mockGetSummarizedAgency.mockResolvedValue(
+        FbiSummarizedResponseSchema.parse(
+          JSON.parse(
+            readFileSync(
+              new URL('../fixtures/cde/agency-ca0194200-property-1985-2026.json', import.meta.url),
+              'utf8',
+            ),
+          ),
         ),
-      ),
-    );
-    mockGetSummarizedAgency.mockResolvedValue(captured);
-    const result = await runToolContract(fbiGetCrimeEstimates, {
-      scope: 'agency',
-      ori: 'CA0194200',
-      offense: 'property-crime',
-      from_year: 1985,
-      to_year: 2026,
-      include_comparisons: true,
-    });
-    expect(result.isError).not.toBe(true);
-    expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThanOrEqual(24000);
-    expect(result.structuredContent).toHaveProperty('next_from');
-    expect(JSON.stringify(result.content)).toContain('next_from');
-  });
-
-  it('returns an indivisible oversize month intact with disclosure on both surfaces', async () => {
-    const name = '界'.repeat(9000);
-    mockGetSummarizedNational.mockResolvedValue({
-      offenses: { actuals: { [`${name} Offenses`]: { '01-2022': 0 } } },
-    });
-    const result = await runToolContract(fbiGetCrimeEstimates, {
-      scope: 'national',
-      offense: 'robbery',
-      from_year: 2022,
-      to_year: 2022,
-    });
-    expect(result.isError).not.toBe(true);
-    expect(result.structuredContent).toMatchObject({
-      entity_name: name,
-      months: [{ actual_count: 0 }],
-      total_months: 1,
-    });
-    expect(result.structuredContent).toHaveProperty('oversize_notice');
-    expect(result.structuredContent).not.toHaveProperty('next_from');
-    expect(JSON.stringify(result.content)).toContain('24,000');
-  });
-
-  it.each([
-    ['12-2021', '01-2022', 2022, 1],
-    ['12-2021', '03-2022', 2022, 3],
-  ] as const)(
-    'advances an oversize unit from %s to the first available scoped month %s',
-    async (first, second, year, month) => {
-      const name = '界'.repeat(9000);
-      mockGetSummarizedAgency.mockResolvedValue({
-        offenses: {
-          actuals: { [`${name} Offenses`]: { [first]: 0, [second]: null } },
-          rates: { 'State Offenses': { [first]: 0 }, 'Nation Offenses': { [second]: 0 } },
-        },
-      });
+      );
       const result = await runToolContract(fbiGetCrimeEstimates, {
         scope: 'agency',
-        ori: 'CA0010400',
-        offense: 'robbery',
-        from_year: 2021,
-        to_year: 2022,
-        include_comparisons: true,
+        ori: 'CA0194200',
+        offense: 'property-crime',
+        from_year: 1985,
+        to_year: 2026,
+        include_comparisons,
       });
-      const page = fbiGetCrimeEstimates.output.parse(result.structuredContent);
-      expect(page.entity_name).toBe(name);
-      expect(page.months).toHaveLength(1);
-      expect(page.months[0]).toMatchObject({ year: 2021, month: 12, actual_count: 0 });
-      expect(page.next_from).toEqual({ from_year: year, from_month: month });
-      expect(page.oversize_notice).toContain('24,000');
-      expect(page.comparisons).toEqual([
-        {
-          entity_name: 'State',
-          months: [
-            {
-              year: 2021,
-              month: 12,
-              rate_per_100k: 0,
-              clearance_rate_per_100k: null,
-              population: null,
-              participated_population: null,
-              population_coverage_percent: null,
-            },
-          ],
-        },
-        {
-          entity_name: 'Nation',
-          months: [
-            {
-              year: 2021,
-              month: 12,
-              rate_per_100k: null,
-              clearance_rate_per_100k: null,
-              population: null,
-              participated_population: null,
-              population_coverage_percent: null,
-            },
-          ],
-        },
+      expect(result.isError).not.toBe(true);
+      expect(mockGetSummarizedAgency).toHaveBeenCalledTimes(1);
+      expect(result.structuredContent).not.toHaveProperty('next_from');
+      expect(result.structuredContent).not.toHaveProperty('oversize_notice');
+      const output = fbiGetCrimeEstimates.output.parse(result.structuredContent);
+      expect(output.total_months).toBe(504);
+      expect(output.months).toHaveLength(504);
+      expect(output.months[0]).toMatchObject({
+        year: 1985,
+        month: 1,
+        rate_per_100k: 639.39,
+        actual_count: 20374,
+        population: 3186459,
+      });
+      expect(output.months.at(-1)).toMatchObject({
+        year: 2026,
+        month: 12,
+        rate_per_100k: null,
+        actual_count: null,
+      });
+      const text = rendered(result);
+      expect(text).toContain('**Months returned:** 504');
+      expect(text).toContain('| 1985 | 01 | 639.39 |');
+      expect(text).toContain('| 2026 | 12 | — |');
+      expect(text).not.toMatch(/next_from|oversize|24,000/);
+      const rows = text.split('\n').filter((line) => /^\| \d{4} \| \d{2} \|/.test(line));
+      if (!include_comparisons) {
+        expect(result.structuredContent).not.toHaveProperty('comparisons');
+        expect(rows).toHaveLength(504);
+        return;
+      }
+      expect(output.comparisons?.map((comparison) => comparison.entity_name)).toEqual([
+        'California',
+        'United States',
       ]);
-      const rendered = result.content
-        .filter((block) => block.type === 'text')
-        .map((block) => block.text)
-        .join('\n');
-      expect(rendered).toContain(page.oversize_notice);
-      expect(rendered).toContain(`from_year=${year}, from_month=${month}`);
-      expect(rendered).toContain('### Comparison: State');
-      expect(rendered).not.toContain(`| ${year} | ${String(month).padStart(2, '0')} |`);
+      const scopedMonths = output.months.map(({ year, month }) => ({ year, month }));
+      for (const comparison of output.comparisons ?? []) {
+        expect(comparison.months.map(({ year, month }) => ({ year, month }))).toEqual(scopedMonths);
+      }
+      expect(text).toContain('### Comparison: California');
+      expect(text).toContain('### Comparison: United States');
+      expect(rows).toHaveLength(504 * 3);
     },
   );
 
-  it('discloses oversized metadata without dropping provider fields or inventing continuation', async () => {
-    const updated = '界'.repeat(9000);
-    mockGetSummarizedNational.mockResolvedValue({
-      ...mockNationalResponse,
-      cde_properties: { last_refresh_date: { UCR: updated }, max_data_date: { UCR: '2023-12-31' } },
+  it('advertises no continuation field or byte budget', () => {
+    const properties = Object.keys(z.toJSONSchema(fbiGetCrimeEstimates.output).properties ?? {});
+    expect(properties).toContain('months');
+    expect(properties).not.toContain('next_from');
+    expect(properties).not.toContain('oversize_notice');
+    expect(fbiGetCrimeEstimates.description).not.toMatch(/24,000|next_from|oversize_notice/);
+  });
+
+  it('renders numbers in en-US whatever the host default locale', async () => {
+    mockGetSummarizedState.mockResolvedValue({
+      offenses: {
+        rates: {
+          'California Offenses': { '01-2022': 2.72 },
+          'California Clearances': { '01-2022': 0.5 },
+        },
+        actuals: {
+          'California Offenses': { '01-2022': 1233 },
+          'California Clearances': { '01-2022': 1042 },
+        },
+      },
+      populations: {
+        population: { California: { '01-2022': 39029342 } },
+        participated_population: { California: { '01-2022': 38642850 } },
+      },
+      tooltips: { 'Percent of Population Coverage': { California: { '01-2022': 99.01 } } },
     });
-    const result = await runToolContract(fbiGetCrimeEstimates, {
-      scope: 'national',
-      offense: 'robbery',
-      from_year: 2022,
-      to_year: 2022,
+    // Node takes its default locale from LANG; simulate a de-DE host (Bun always resolves en-US).
+    const HostNumberFormat = Intl.NumberFormat;
+    const hostToLocaleString = Number.prototype.toLocaleString;
+    const numberFormat = vi.spyOn(Intl, 'NumberFormat').mockImplementation(
+      class extends HostNumberFormat {
+        constructor(locales?: Intl.LocalesArgument, options?: Intl.NumberFormatOptions) {
+          super(locales ?? 'de-DE', options);
+        }
+      },
+    );
+    const numberToLocaleString = vi
+      .spyOn(Number.prototype, 'toLocaleString')
+      .mockImplementation(function (this: number, locales, options) {
+        return hostToLocaleString.call(this, locales ?? 'de-DE', options);
+      });
+    let result: Awaited<ReturnType<typeof runToolContract>>;
+    try {
+      expect((1233).toLocaleString()).toBe('1.233');
+      expect(new Intl.NumberFormat().format(39029342)).toBe('39.029.342');
+      // The shared population and coverage cells use a formatter built at import, so import the
+      // tool afresh on the simulated host.
+      vi.resetModules();
+      const { fbiGetCrimeEstimates: onHost } = await import(
+        '@/mcp-server/tools/definitions/get-crime-estimates.tool.js'
+      );
+      result = await runToolContract(onHost, {
+        scope: 'state',
+        state_abbr: 'CA',
+        offense: 'robbery',
+        from_year: 2022,
+        to_year: 2022,
+        to_month: 1,
+      });
+    } finally {
+      numberFormat.mockRestore();
+      numberToLocaleString.mockRestore();
+    }
+    expect(result.structuredContent).toMatchObject({
+      months: [{ rate_per_100k: 2.72, actual_count: 1233, population: 39029342 }],
     });
-    const page = fbiGetCrimeEstimates.output.parse(result.structuredContent);
-    expect(page.data_last_updated).toBe(updated);
-    expect(page.max_data_date).toBe('2023-12-31');
-    expect(page.months).toHaveLength(1);
-    expect(page.next_from).toEqual({ from_year: 2022, from_month: 2 });
-    expect(page.oversize_notice).toContain('24,000');
-    expect(JSON.stringify(result.content)).toContain(updated);
+    expect(rendered(result)).toContain(
+      '| 2022 | 01 | 2.72 | 0.5 | 1,233 | 1,042 | 39,029,342 | 38,642,850 | 99.01% |',
+    );
   });
 
   it('returns state estimates', async () => {

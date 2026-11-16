@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "fbi-crime-mcp-server",
   "version": "0.4.1",
-  "description": "Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts, hate crime, arrest, and NIBRS breakdowns by national, state, or agency scope, agency ORI search, and LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.",
+  "description": "Exposes the FBI Crime Data Explorer API — monthly UCR offense rates and counts, hate crime, arrest, and NIBRS breakdowns by national, state, or agency scope, agency ORI search, annual law enforcement staffing, and LEOKA officer-safety statistics via MCP. STDIO or Streamable HTTP.",
   "author": {
     "name": "cyanheads"
   },
@@ -22,7 +22,8 @@
         "MCP_TRANSPORT_TYPE": "stdio",
         "MCP_AUTH_MODE": "none",
         "NODE_ENV": "production",
-        "FBI_API_KEY": "${user_config.fbi_api_key}"
+        "FBI_API_KEY": "${user_config.fbi_api_key}",
+        "FBI_CLAMP_LIMITS": "${user_config.fbi_clamp_limits}"
       }
     }
   },
@@ -40,6 +41,13 @@
       "description": "api.data.gov API key for the FBI Crime Data Explorer. Free at https://api.data.gov/signup/.",
       "required": true,
       "sensitive": true
+    },
+    "fbi_clamp_limits": {
+      "type": "boolean",
+      "title": "Clamp oversized agency pages",
+      "description": "Serve an fbi_search_agencies limit above 200 at 200 with a notice. Disable to reject a larger limit.",
+      "required": false,
+      "default": true
     }
   }
 }

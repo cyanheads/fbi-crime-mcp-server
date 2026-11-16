@@ -5,6 +5,6 @@
     "env": {
       "MCP_TRANSPORT_TYPE": "stdio"
     },
-    "env_vars": ["FBI_API_KEY"]
+    "env_vars": ["FBI_API_KEY", "FBI_CLAMP_LIMITS"]
   }
 }

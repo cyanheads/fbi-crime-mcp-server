@@ -6,6 +6,12 @@
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
+import {
+  identifierCheck,
+  includeMonthlyField,
+  monthlySeries,
+  totalsWithCounts,
+} from '@/mcp-server/tools/cde-monthly.js';
 import { resolveScopedRange, scopedRangeFields } from '@/mcp-server/tools/cde-scoped-range.js';
 import {
   allCountsZero,
@@ -71,9 +77,36 @@ const BIAS_VALUES: ['all', ...BiasCode[]] = ['all', ...(Object.keys(BIAS_LABELS)
 
 const { scope: scopeField, ...rangeFields } = scopedRangeFields(FLOOR_YEAR);
 
+const MONTHLY = monthlySeries({
+  counts: {
+    incident_count: {
+      series: 'Incidents',
+      header: 'Incidents',
+      description: 'Hate crime incidents in the month.',
+    },
+    offense_count: {
+      series: 'Offenses',
+      header: 'Offenses',
+      description: 'Hate crime offenses in the month.',
+    },
+  },
+  rates: {
+    incident_rate_per_100k: {
+      series: 'Incidents',
+      header: 'Incident rate/100k',
+      description: 'Incident rate for the month.',
+    },
+    offense_rate_per_100k: {
+      series: 'Offenses',
+      header: 'Offense rate/100k',
+      description: 'Offense rate for the month.',
+    },
+  },
+});
+
 export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
   title: 'FBI Get Hate Crimes',
-  description: `Hate crime counts reported to FBI CDE for the nation, a state, or an agency, summed over a month window from January ${FLOOR_YEAR} through the current year. Returns incidents by bias motivation and bias category, plus counts by offense type, location type, offender race, offender ethnicity, and federal judicial district, with every category CDE reports, zeros included. Narrow to one bias motivation with bias. National scope omits identifiers; state requires only state_abbr; agency requires only ori (look it up with fbi_search_agencies). CDE returns zeros both when nothing was reported and when it does not recognize a state or ORI.`,
+  description: `Hate crime counts reported to FBI CDE for the nation, a state, or an agency, summed over a month window from January ${FLOOR_YEAR} through the current year. Returns incidents by bias motivation and bias category, plus counts by offense type, location type, offender race, offender ethnicity, and federal judicial district, with every category CDE reports, zeros included. Narrow to one bias motivation with bias. National scope omits identifiers; state requires only state_abbr; agency requires only ori (look it up with fbi_search_agencies). CDE returns zeros both when nothing was reported and when it does not recognize a state or ORI. Set include_monthly for month-by-month incident and offense counts and rates with population and reporting coverage, which also tells those two cases apart.`,
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [
@@ -119,6 +152,7 @@ export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
         `Bias motivation code to narrow the counts to, or all (default). With a code, incidents count that motivation plus multiple-bias incidents that include it. Codes: ${codeListing(BIAS_LABELS)}.`,
       ),
     ...rangeFields,
+    include_monthly: includeMonthlyField,
   }),
 
   output: z.object({
@@ -150,6 +184,7 @@ export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
       .string()
       .optional()
       .describe('Date CDE last refreshed hate crime data; absent when CDE omits it.'),
+    monthly: MONTHLY.field,
   }),
 
   enrichment: {
@@ -167,13 +202,21 @@ export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
       bias: input.bias,
       state_abbr: input.state_abbr,
       ori: input.ori,
+      include_monthly: input.include_monthly,
     });
     const range = resolveScopedRange(input, FLOOR_YEAR, ctx);
-    const data = await getFbiApiService().getHateCrimeTotals(range, input.bias, ctx);
+    const service = getFbiApiService();
+    const [data, counts] = await totalsWithCounts(
+      ctx,
+      input.include_monthly,
+      (shared) => service.getHateCrimeTotals(range, input.bias, shared),
+      (shared) => service.getCounts('hate-crime', range, input.bias, shared),
+    );
+    const monthly = counts && MONTHLY.rows(counts);
     const { incident_section, bias_section } = data;
 
     if (allCountsZero([...Object.values(incident_section), ...Object.values(bias_section)])) {
-      ctx.enrich.notice(zeroCountsNotice(range.scope));
+      ctx.enrich.notice(zeroCountsNotice(range.scope, identifierCheck(monthly)));
     }
     const lastUpdated = data.last_refresh_date?.UCR;
     return {
@@ -183,6 +226,7 @@ export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
       incident_section,
       bias_section,
       ...(lastUpdated && { data_last_updated: lastUpdated }),
+      ...(monthly !== undefined && { monthly: monthly ?? [] }),
     };
   },
 
@@ -208,6 +252,7 @@ export const fbiGetHateCrimes = tool('fbi_get_hate_crimes', {
       ...countTable('Offender ethnicity', breakdowns.offender_ethnicity),
       ...countTable('Judicial district', breakdowns.judicial_district),
     );
+    if (result.monthly) lines.push(...MONTHLY.table(result.monthly));
     return [{ type: 'text', text: lines.join('\n') }];
   },
 });

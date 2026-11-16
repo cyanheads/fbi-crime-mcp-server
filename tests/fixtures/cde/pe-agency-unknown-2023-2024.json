@@ -1,0 +1,41 @@
+{
+  "rates": {
+    "Law Enforcement Employees per 1,000 People": {
+      "2023": null,
+      "2024": null
+    }
+  },
+  "actuals": {
+    "Male Officers": {
+      "2023": null,
+      "2024": null
+    },
+    "Male Civilians": {
+      "2023": null,
+      "2024": null
+    },
+    "Female Officers": {
+      "2023": null,
+      "2024": null
+    },
+    "Female Civilians": {
+      "2023": null,
+      "2024": null
+    }
+  },
+  "tooltips": null,
+  "populations": {
+    "Participated Population": {
+      "2023": null,
+      "2024": null
+    }
+  },
+  "cde_properties": {
+    "max_data_date": {
+      "UCR": "11/2026"
+    },
+    "last_refresh_date": {
+      "UCR": "11/15/2026"
+    }
+  }
+}

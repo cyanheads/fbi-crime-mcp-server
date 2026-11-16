@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @fileoverview fbi-crime-mcp-server MCP server entry point.
- * Exposes six FBI CDE tools and retains five disabled operator definitions.
+ * Exposes seven FBI CDE tools and retains five disabled operator definitions.
  * @module index
  */
 
@@ -16,9 +16,13 @@ import { fbiGetHumanTrafficking } from './mcp-server/tools/definitions/get-human
 import { fbiGetLeoka } from './mcp-server/tools/definitions/get-leoka.tool.js';
 import { fbiGetNibrsBreakdown } from './mcp-server/tools/definitions/get-nibrs-breakdown.tool.js';
 import { fbiGetParticipation } from './mcp-server/tools/definitions/get-participation.tool.js';
+import { fbiGetPoliceEmployees } from './mcp-server/tools/definitions/get-police-employees.tool.js';
 // Tool definitions
 import { fbiListCodeTable } from './mcp-server/tools/definitions/list-code-table.tool.js';
-import { fbiSearchAgencies } from './mcp-server/tools/definitions/search-agencies.tool.js';
+import {
+  fbiSearchAgencies,
+  setLimitClamping,
+} from './mcp-server/tools/definitions/search-agencies.tool.js';
 import { initFbiApiService } from './services/fbi-api/fbi-api-service.js';
 
 await createApp({
@@ -45,6 +49,7 @@ await createApp({
       reason: 'UCR human-trafficking endpoint retired. Consult https://cde.ucr.cjis.gov/.',
     }),
     fbiGetLeoka,
+    fbiGetPoliceEmployees,
     disabledTool(fbiGetArson, {
       reason:
         'UCR arson endpoint retired. Use fbi_get_crime_estimates with offense="arson", or consult https://cde.ucr.cjis.gov/.',
@@ -52,10 +57,12 @@ await createApp({
   ],
   resources: [],
   prompts: [],
+  skills: 'skills',
   instructions:
-    'FBI Crime Data Explorer MCP server (post-UCR decommission).\n- Use fbi_search_agencies to find an agency ORI by state, name words, county or type, then pass it as ori with scope "agency" to the scoped tools below. National scope omits identifiers; state uses only state_abbr; agency uses only ori.\n- Use fbi_get_crime_estimates for monthly offense rates/counts and provider populations/coverage; set include_comparisons for the state/national comparison rates. Monthly results budget 24,000 UTF-8 bytes of serialized {content, structuredContent}, excluding protocol metadata and framing. Follow next_from with the same scope, identifiers, offense, comparison flag and original end date; an indivisible oversize month is returned intact with oversize_notice. Coverage may be null or incomplete.\n- Use fbi_get_hate_crimes, fbi_get_arrests and fbi_get_nibrs_breakdown for category totals summed over a month window: hate crimes by bias motivation, arrests by offense and arrestee demographics, NIBRS victim/offender/offense details for one offense. All-zero hate-crime and arrest results can also mean an unrecognized state or ORI; NIBRS fails with no_data then.\n- Use fbi_get_leoka for officer fatality, weapon and circumstance data. YTD omits month; monthly requires month.\n- Years run through the current year, from 1985 (estimates, arrests), 1991 (hate crimes, NIBRS) or 2020 (LEOKA).\n- Six tools are callable. Five retired tools remain disabled on the operator landing page; no resources are registered. Consult https://cde.ucr.cjis.gov/ for other datasets.',
+    'FBI Crime Data Explorer MCP server (post-UCR decommission).\n- Use fbi_search_agencies to find an agency ORI by state, name words, county or type, then pass it as ori with scope "agency" to the scoped tools below. National scope omits identifiers; state uses only state_abbr; agency uses only ori.\n- Use fbi_get_crime_estimates for monthly offense rates/counts and provider populations/coverage; set include_comparisons for the state/national comparison rates. Coverage may be null or incomplete.\n- Use fbi_get_hate_crimes, fbi_get_arrests and fbi_get_nibrs_breakdown for category totals summed over a month window: hate crimes by bias motivation, arrests by offense and arrestee demographics, NIBRS victim/offender/offense details for one offense. An arrest offense code counts one CDE breakdown row; for a category total use offense all and read offense_category. Set include_monthly for one row per month with counts, rates, population and reporting coverage (one more request); for hate crimes and arrests it also tells an unrecognized state or ORI (empty monthly) from one that reported nothing. Without it, all-zero hate-crime and arrest results can also mean an unrecognized state or ORI; NIBRS fails with no_data then.\n- Use fbi_get_leoka for officer fatality, weapon and circumstance data. YTD omits month; monthly requires month.\n- Use fbi_get_police_employees for annual law enforcement staffing: sworn officers and civilians by sex, employees per 1,000 people as CDE publishes it, participated population, and coverage at state and national scope. A year CDE has not published returns a row of nulls; no value in any requested year fails no_data.\n- Years run through the current year, from 1985 (estimates, arrests, police employees), 1991 (hate crimes, NIBRS) or 2020 (LEOKA).\n- The fbi-crime-guide skill (skill://fbi-crime-guide/SKILL.md) carries the gates for agency ORIs, an unrecognized identifier versus nothing reported, null versus zero, headline totals from category maps, and reporting coverage before comparing periods.\n- Seven tools are callable. Five retired tools remain disabled on the operator landing page. Consult https://cde.ucr.cjis.gov/ for other datasets.',
   setup(core) {
     const serverConfig = getServerConfig();
     initFbiApiService(core.config, core.storage, serverConfig);
+    setLimitClamping(serverConfig.clampLimits);
   },
 });

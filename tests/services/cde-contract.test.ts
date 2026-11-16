@@ -15,6 +15,7 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fbiGetCrimeEstimates } from '@/mcp-server/tools/definitions/get-crime-estimates.tool.js';
 import { fbiGetLeoka } from '@/mcp-server/tools/definitions/get-leoka.tool.js';
+import { fbiGetPoliceEmployees } from '@/mcp-server/tools/definitions/get-police-employees.tool.js';
 import { initFbiApiService } from '@/services/fbi-api/fbi-api-service.js';
 import { FbiSummarizedResponseSchema } from '@/services/fbi-api/types.js';
 
@@ -46,7 +47,6 @@ beforeEach(() => {
   http.install();
   initFbiApiService(parseConfig(), createInMemoryStorage(), {
     apiKey: 'TEST_KEY',
-    baseUrlUcr: baseUrl,
     baseUrlCde: baseUrl,
     requestTimeoutMs: 15000,
   });
@@ -133,7 +133,7 @@ const PINNED = {
 };
 
 describe('CDE characterization', () => {
-  it('keeps the complete under-budget agency CallToolResult byte-identical', async () => {
+  it('keeps the complete agency CallToolResult byte-identical', async () => {
     reply('/summarized/agency/CA0010400/robbery', capture('agency'));
     const result = await runToolContract(fbiGetCrimeEstimates, summarizedInput);
     expect(JSON.stringify(result)).toBe(
@@ -441,6 +441,39 @@ describe('absent and malformed upstream data (#11)', () => {
     expect(result.isError).toBe(true);
     expect(text(result)).not.toContain('no_data');
   });
+  for (const body of ['{"data": "unterminated', 'Service is busy, try later', '']) {
+    it(`fails the 200 body ${JSON.stringify(body)} once as a malformed upstream response`, async () => {
+      vi.useFakeTimers();
+      http.route({
+        match: (request) => new URL(request.url).pathname === '/leoka/ytd',
+        respond: new Response(body),
+      });
+      const pending = runToolContract(fbiGetLeoka, { period: 'ytd', year: 2023 });
+      await vi.advanceTimersByTimeAsync(60000);
+      const result = await pending;
+      expect(result.structuredContent).toMatchObject({
+        error: { code: JsonRpcErrorCode.SerializationError },
+      });
+      expect(text(result)).toContain('Malformed FBI API response: the body is not JSON.');
+      expect(text(result)).not.toMatch(/JSON at position|JSON Parse error|Unexpected/);
+      expect(http.calls).toHaveLength(1);
+    });
+  }
+  it('retries a 200 HTML page as the upstream being unavailable', async () => {
+    vi.useFakeTimers();
+    http.route({
+      match: (request) => new URL(request.url).pathname === '/leoka/ytd',
+      respond: new Response('<!DOCTYPE html><html><body>Too many requests</body></html>'),
+    });
+    const pending = runToolContract(fbiGetLeoka, { period: 'ytd', year: 2023 });
+    await vi.advanceTimersByTimeAsync(60000);
+    const result = await pending;
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.ServiceUnavailable, data: { retryAttempts: 4 } },
+    });
+    expect(text(result)).toContain('FBI API returned HTML instead of JSON');
+    expect(http.calls).toHaveLength(4);
+  });
   it('carries month_required recovery without fetching', async () => {
     expectFailure(
       await runToolContract(fbiGetLeoka, { period: 'monthly', year: 2023 }),
@@ -495,6 +528,32 @@ describe('CDE cancellation and retry boundaries', () => {
       expect(http.calls).toHaveLength(1);
     });
   }
+  it('settles a hung upstream under the 60 s client timeout, across every retry', async () => {
+    vi.useFakeTimers();
+    http.route({
+      match: () => true,
+      respond: (request) =>
+        new Promise<Response>((_resolve, reject) => {
+          request.signal.addEventListener('abort', () => reject(request.signal.reason), {
+            once: true,
+          });
+        }),
+    });
+    let settled = false;
+    const pending = runToolContract(fbiGetLeoka, { period: 'ytd', year: 2023 }).finally(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(settled).toBe(true);
+    const result = await pending;
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.Timeout,
+        data: { reason: 'retry_deadline_exceeded' },
+      },
+    });
+    expect(text(result)).not.toContain('no_data');
+  });
   it('retries a transient request and preserves populated denominators after recovery', async () => {
     vi.useFakeTimers();
     http.route({
@@ -531,6 +590,104 @@ describe('CDE cancellation and retry boundaries', () => {
     expect(text(result)).toContain('95.95%');
     expect(http.calls).toHaveLength(3);
   });
+});
+
+/** A refusal the api.data.gov gateway answers itself, in its documented body shape. */
+function gatewayRefusal(status: 403 | 429, code: string, message: string): Response {
+  return Response.json({ error: { code, message } }, { status });
+}
+
+function errorData(result: Awaited<ReturnType<typeof runToolContract>>): Record<string, unknown> {
+  return (result.structuredContent as { error: { data: Record<string, unknown> } }).error.data;
+}
+
+describe('api.data.gov gateway refusals', () => {
+  it('fails a refused key once as Forbidden, keeping the gateway body off both surfaces', async () => {
+    http.route({
+      match: () => true,
+      respond: gatewayRefusal(
+        403,
+        'API_KEY_INVALID',
+        'Your API key is not valid. Please get a new one at https://api.data.gov/signup/',
+      ),
+    });
+    const result = await runToolContract(fbiGetLeoka, { period: 'ytd', year: 2023 });
+    expect(result.isError).toBe(true);
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.Forbidden, data: { status: 403 } },
+    });
+    expect(errorData(result)).not.toHaveProperty('body');
+    expect(errorData(result)).not.toHaveProperty('responseBody');
+    expect(text(result)).not.toContain('API_KEY_INVALID');
+    expect(http.calls).toHaveLength(1);
+  });
+
+  it('tells the agent a refused key needs a new one, on both surfaces', async () => {
+    const hint =
+      "api.data.gov refused this server's API key (FBI_API_KEY), so no request succeeds until it changes: stop retrying, and tell the user to set a valid key from https://api.data.gov/signup/ and restart the server.";
+    http.route({
+      match: () => true,
+      respond: gatewayRefusal(
+        403,
+        'API_KEY_MISSING',
+        'An API key was not provided. Please get one at https://api.data.gov/signup/',
+      ),
+    });
+    const result = await runToolContract(fbiGetCrimeEstimates, summarizedInput);
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.Forbidden, data: { status: 403, recovery: { hint } } },
+    });
+    expect(text(result)).toContain(`Recovery: ${hint}`);
+    expect(http.calls).toHaveLength(1);
+  });
+
+  it('keeps the rate-limit next step through exhausted retries, on both surfaces', async () => {
+    vi.useFakeTimers();
+    const hint =
+      "This server's api.data.gov key used up its request limit (DEMO_KEY allows 30 requests an hour and 50 a day per IP address; a registered key allows 1,000 an hour): wait before retrying, and if the server runs on DEMO_KEY, tell the user a free registered key from https://api.data.gov/signup/ raises the limit.";
+    http.route({
+      match: () => true,
+      respond: () =>
+        gatewayRefusal(
+          429,
+          'OVER_RATE_LIMIT',
+          'You have exceeded your rate limit. Try again later or contact us at https://api.data.gov:443/contact/ for assistance',
+        ),
+    });
+    const pending = runToolContract(fbiGetLeoka, { period: 'monthly', year: 2024, month: 1 });
+    await vi.advanceTimersByTimeAsync(60000);
+    const result = await pending;
+    expect(result.structuredContent).toMatchObject({
+      error: {
+        code: JsonRpcErrorCode.RateLimited,
+        data: { status: 429, retryAttempts: 4, recovery: { hint } },
+      },
+    });
+    expect(errorData(result)).not.toHaveProperty('body');
+    expect(text(result)).toContain(`Recovery: ${hint}`);
+    expect(text(result)).not.toContain('OVER_RATE_LIMIT');
+    expect(http.calls).toHaveLength(4);
+  });
+
+  for (const [status, code] of [
+    [400, JsonRpcErrorCode.InvalidParams],
+    [500, JsonRpcErrorCode.ServiceUnavailable],
+  ] as const) {
+    it(`adds no gateway next step to an HTTP ${status} from CDE`, async () => {
+      vi.useFakeTimers();
+      http.route({
+        match: () => true,
+        respond: () => new Response('upstream text', { status }),
+      });
+      const pending = runToolContract(fbiGetLeoka, { period: 'ytd', year: 2023 });
+      await vi.advanceTimersByTimeAsync(60000);
+      const result = await pending;
+      expect(result.structuredContent).toMatchObject({ error: { code, data: { status } } });
+      expect(errorData(result)).not.toHaveProperty('recovery');
+      expect(text(result)).not.toContain('Recovery:');
+      expect(text(result)).not.toContain('upstream text');
+    });
+  }
 });
 
 describe('scoped populations and coverage (#19)', () => {
@@ -1062,6 +1219,101 @@ function pinDate(iso: string): void {
   vi.setSystemTime(new Date(iso));
 }
 
+describe('police employees /pe (#32)', () => {
+  for (const [scope, identifier, path, fixture, row2024, line2024] of [
+    [
+      'agency',
+      { ori: 'WASPD0000' },
+      '/pe/agency/WASPD0000',
+      'pe-agency-waspd0000-2017-2026',
+      { male_officers: 890, employees_per_1000: 1.96, population_coverage_percent: null },
+      '| 2024 | 890 | 156 | 187 | 255 | 1.96 | 760,058 | — |',
+    ],
+    [
+      'state',
+      { state_abbr: 'WA' },
+      '/pe/WA',
+      'pe-state-wa-2017-2026',
+      { male_officers: 9475, employees_per_1000: 2.05, population_coverage_percent: 99.54 },
+      '| 2024 | 9,475 | 1,299 | 2,328 | 3,233 | 2.05 | 7,921,326 | 99.54% |',
+    ],
+    [
+      'national',
+      {},
+      '/pe',
+      'pe-national-2017-2026',
+      { male_officers: 661861, employees_per_1000: 3.53, population_coverage_percent: 99.71 },
+      '| 2024 | 661,861 | 110,889 | 147,334 | 215,655 | 3.53 | 321,029,169 | 99.71% |',
+    ],
+  ] as const) {
+    it(`sends one ${path} request with bare years and relays the ${scope} capture`, async () => {
+      reply(path, capture(fixture));
+      const result = await runToolContract(fbiGetPoliceEmployees, {
+        scope,
+        ...identifier,
+        from_year: 2017,
+        to_year: 2026,
+      });
+      expect(result.isError).not.toBe(true);
+      expect(http.calls).toHaveLength(1);
+      const url = new URL(http.calls[0]!.request.url);
+      expect(url.pathname).toBe(path);
+      expect(url.searchParams.get('from')).toBe('2017');
+      expect(url.searchParams.get('to')).toBe('2026');
+      const years = (result.structuredContent as { years: { year: number }[] }).years;
+      expect(years.find((row) => row.year === 2024)).toMatchObject(row2024);
+      expect(text(result)).toContain(line2024);
+    });
+  }
+  it('passes the published rate through where the counts give another value', async () => {
+    reply('/pe/WA', capture('pe-state-wa-2017-2026'));
+    const result = await runToolContract(fbiGetPoliceEmployees, {
+      scope: 'state',
+      state_abbr: 'WA',
+      from_year: 2017,
+      to_year: 2026,
+    });
+    const years = (result.structuredContent as { years: Record<string, number>[] }).years;
+    const row = years.find((entry) => entry.year === 2021);
+    if (!row) throw new Error('no 2021 row');
+    const employees =
+      row.male_officers! + row.female_officers! + row.male_civilians! + row.female_civilians!;
+    // 15,205 employees over 7,705,506 people is 1.97 per 1,000; CDE publishes 1.96.
+    expect(Math.round((employees * 100_000) / row.participated_population!) / 100).toBe(1.97);
+    expect(row.employees_per_1000).toBe(1.96);
+    expect(text(result)).toContain('| 2021 | 9,322 | 1,108 | 1,962 | 2,813 | 1.96 | 7,705,506 |');
+  });
+  for (const [label, from, to] of [
+    ['a non-numeric count', '"2024":9475', '"2024":"9475"'],
+    ['a renamed series', '"Male Officers"', '"Officers - Male"'],
+    ['a year key that is not four digits', '"2017":2.09', '"FY17":2.09'],
+    ['a second coverage entity', '"Washington":{', '"United States":{"2024":99.71},"Washington":{'],
+    ['a missing section', '"populations":', '"participation":'],
+    ['a missing rates section', '"rates":', '"rate":'],
+    ['a missing actuals section', '"actuals":', '"actual":'],
+    ['a missing tooltips section', '"tooltips":', '"tooltip":'],
+  ] as const) {
+    it(`fails ${label} as malformed upstream data`, async () => {
+      const original = JSON.stringify(capture('pe-state-wa-2017-2026'));
+      const malformed = original.replace(from, to);
+      expect(malformed).not.toBe(original);
+      reply('/pe/WA', JSON.parse(malformed));
+      const result = await runToolContract(fbiGetPoliceEmployees, {
+        scope: 'state',
+        state_abbr: 'WA',
+        from_year: 2017,
+        to_year: 2026,
+      });
+      expect(result.isError).toBe(true);
+      expect(result.structuredContent).toMatchObject({
+        error: { code: JsonRpcErrorCode.SerializationError },
+      });
+      expect(text(result)).toContain('Malformed FBI police employee response');
+      expect(http.calls).toHaveLength(1);
+    });
+  }
+});
+
 describe('LEOKA month coverage (#22)', () => {
   it('monthly keeps only the requested month, genuine zeros and null groups included', async () => {
     const chart = {
@@ -1572,149 +1824,135 @@ describe('comparison rates (#24)', () => {
   });
 });
 
-describe('monthly result continuation (#26)', () => {
-  it.each([false, true])(
-    'walks every captured month exactly once, comparisons=%s',
-    async (include_comparisons) => {
-      const source = FbiSummarizedResponseSchema.parse(
-        capture('agency-ca0194200-property-1985-2026'),
-      );
-      const dateNumber = (key: string) => Number(key.slice(3)) * 12 + Number(key.slice(0, 2));
-      const scoped = source.offenses?.actuals?.['Los Angeles Police Department Offenses'];
-      if (!scoped) throw new Error('Captured agency actuals missing');
-      const keys = Object.keys(scoped).sort((a, b) => dateNumber(a) - dateNumber(b));
-      expect(keys).toHaveLength(504);
-      http.route({
-        match: () => true,
-        respond: (request) => {
-          const start = new URL(request.url).searchParams.get('from');
-          if (!start) throw new Error('Missing from');
-          const payload = structuredClone(source);
-          for (const maps of [
-            payload.offenses?.actuals,
-            payload.offenses?.rates,
-            payload.populations?.population,
-            payload.populations?.participated_population,
-            payload.tooltips?.['Percent of Population Coverage'],
-          ]) {
-            for (const [name, series] of Object.entries(maps ?? {})) {
-              if (series && maps)
-                maps[name] = Object.fromEntries(
-                  Object.entries(series).filter(([key]) => dateNumber(key) >= dateNumber(start)),
-                );
-            }
+describe('whole monthly window (#33)', () => {
+  const source = FbiSummarizedResponseSchema.parse(capture('agency-ca0194200-property-1985-2026'));
+  const agency = 'Los Angeles Police Department';
+  const dateNumber = (key: string) => Number(key.slice(3)) * 12 + Number(key.slice(0, 2));
+  const capturedKeys = Object.keys(source.offenses?.actuals?.[`${agency} Offenses`] ?? {}).sort(
+    (a, b) => dateNumber(a) - dateNumber(b),
+  );
+  const input = {
+    scope: 'agency' as const,
+    ori: 'CA0194200',
+    offense: 'property-crime' as const,
+    from_year: 1985,
+    to_year: 2026,
+  };
+
+  /** Serve the capture as CDE does, holding only the months from the request's `from` onward. */
+  function serveCapture(): void {
+    http.route({
+      match: () => true,
+      respond: (request) => {
+        const start = new URL(request.url).searchParams.get('from');
+        if (!start) throw new Error('Missing from');
+        const payload = structuredClone(source);
+        for (const maps of [
+          payload.offenses?.actuals,
+          payload.offenses?.rates,
+          payload.populations?.population,
+          payload.populations?.participated_population,
+          payload.tooltips?.['Percent of Population Coverage'],
+        ]) {
+          for (const [name, series] of Object.entries(maps ?? {})) {
+            if (series && maps)
+              maps[name] = Object.fromEntries(
+                Object.entries(series).filter(([key]) => dateNumber(key) >= dateNumber(start)),
+              );
           }
-          return Response.json(payload);
-        },
+        }
+        return Response.json(payload);
+      },
+    });
+  }
+
+  /** Every scoped and comparison row equals the capture's value for its month, in `keys` order. */
+  function expectCapturedRows(
+    page: z.infer<typeof fbiGetCrimeEstimates.output>,
+    keys: readonly string[],
+  ): void {
+    expect(
+      page.months.map(({ year, month }) => `${String(month).padStart(2, '0')}-${year}`),
+    ).toEqual(keys);
+    keys.forEach((key, index) => {
+      const year = Number(key.slice(3));
+      const month = Number(key.slice(0, 2));
+      expect(page.months[index]).toEqual({
+        year,
+        month,
+        actual_count: source.offenses?.actuals?.[`${agency} Offenses`]?.[key],
+        clearance_count: source.offenses?.actuals?.[`${agency} Clearances`]?.[key] ?? null,
+        rate_per_100k: source.offenses?.rates?.[`${agency} Offenses`]?.[key] ?? null,
+        clearance_rate_per_100k: source.offenses?.rates?.[`${agency} Clearances`]?.[key] ?? null,
+        population: source.populations?.population?.[agency]?.[key] ?? null,
+        participated_population:
+          source.populations?.participated_population?.[agency]?.[key] ?? null,
+        population_coverage_percent:
+          source.tooltips?.['Percent of Population Coverage']?.[agency]?.[key] ?? null,
       });
-      const input = {
-        scope: 'agency' as const,
-        ori: 'CA0194200',
-        offense: 'property-crime' as const,
-        from_year: 1985,
-        from_month: 1,
-        to_year: 2026,
-        to_month: 12,
-        include_comparisons,
-      };
-      const pages: z.infer<typeof fbiGetCrimeEstimates.output>[] = [];
-      const seen: string[] = [];
-      let start = { from_year: 1985, from_month: 1 };
-      for (let calls = 0; calls < 504; calls++) {
-        const result = await runToolContract(fbiGetCrimeEstimates, { ...input, ...start });
-        expect(result.isError).not.toBe(true);
-        expect(Buffer.byteLength(JSON.stringify(result), 'utf8')).toBeLessThanOrEqual(24000);
-        const page = fbiGetCrimeEstimates.output.parse(result.structuredContent);
-        pages.push(page);
-        expect(page.total_months).toBe(page.months.length);
-        expect(page.from).toBe(`${String(start.from_month).padStart(2, '0')}-${start.from_year}`);
-        expect(page.to).toBe('12-2026');
-        for (const month of page.months) {
-          const key = `${String(month.month).padStart(2, '0')}-${month.year}`;
-          seen.push(key);
-          expect(month).toEqual({
-            year: Number(key.slice(3)),
-            month: Number(key.slice(0, 2)),
-            actual_count: scoped[key],
-            clearance_count:
-              source.offenses?.actuals?.['Los Angeles Police Department Clearances']?.[key] ?? null,
-            rate_per_100k:
-              source.offenses?.rates?.['Los Angeles Police Department Offenses']?.[key] ?? null,
-            clearance_rate_per_100k:
-              source.offenses?.rates?.['Los Angeles Police Department Clearances']?.[key] ?? null,
-            population:
-              source.populations?.population?.['Los Angeles Police Department']?.[key] ?? null,
-            participated_population:
-              source.populations?.participated_population?.['Los Angeles Police Department']?.[
-                key
-              ] ?? null,
-            population_coverage_percent:
-              source.tooltips?.['Percent of Population Coverage']?.[
-                'Los Angeles Police Department'
-              ]?.[key] ?? null,
-          });
-          for (const comparison of page.comparisons ?? []) {
-            const row = comparison.months[page.months.indexOf(month)];
-            expect(row).toEqual({
-              year: month.year,
-              month: month.month,
-              rate_per_100k:
-                source.offenses?.rates?.[`${comparison.entity_name} Offenses`]?.[key] ?? null,
-              clearance_rate_per_100k:
-                source.offenses?.rates?.[`${comparison.entity_name} Clearances`]?.[key] ?? null,
-              population: source.populations?.population?.[comparison.entity_name]?.[key] ?? null,
-              participated_population:
-                source.populations?.participated_population?.[comparison.entity_name]?.[key] ??
-                null,
-              population_coverage_percent:
-                source.tooltips?.['Percent of Population Coverage']?.[comparison.entity_name]?.[
-                  key
-                ] ?? null,
-            });
-          }
-        }
-        if (!page.next_from) {
-          expect(text(result)).not.toContain('next_from');
-          break;
-        }
-        expect(text(result)).toContain(
-          `from_year=${page.next_from.from_year}, from_month=${page.next_from.from_month}`,
-        );
-        expect(text(result)).toContain('original end date');
-        start = page.next_from;
+      for (const comparison of page.comparisons ?? []) {
+        const name = comparison.entity_name;
+        expect(comparison.months[index]).toEqual({
+          year,
+          month,
+          rate_per_100k: source.offenses?.rates?.[`${name} Offenses`]?.[key] ?? null,
+          clearance_rate_per_100k: source.offenses?.rates?.[`${name} Clearances`]?.[key] ?? null,
+          population: source.populations?.population?.[name]?.[key] ?? null,
+          participated_population:
+            source.populations?.participated_population?.[name]?.[key] ?? null,
+          population_coverage_percent:
+            source.tooltips?.['Percent of Population Coverage']?.[name]?.[key] ?? null,
+        });
       }
-      expect(pages.length).toBeGreaterThan(2);
-      expect(http.calls).toHaveLength(pages.length);
-      expect(seen).toEqual(keys);
-      expect(pages.at(-1)).not.toHaveProperty('next_from');
-      for (let index = 0; index < pages.length - 1; index++) {
-        const page = pages[index]!;
-        const next = pages[index + 1]!;
-        const nextMonth = next.months[1];
-        const { next_from: _next, ...body } = page;
-        const expanded = {
-          ...body,
-          months: [...page.months, next.months[0]!],
-          total_months: page.total_months + 1,
-          ...(page.comparisons && {
-            comparisons: page.comparisons.map((comparison, i) => ({
-              ...comparison,
-              months: [...comparison.months, next.comparisons![i]!.months[0]!],
-            })),
-          }),
-          ...(nextMonth
-            ? { next_from: { from_year: nextMonth.year, from_month: nextMonth.month } }
-            : next.next_from
-              ? { next_from: next.next_from }
-              : {}),
-        };
-        const expandedResult = await runToolContract(
-          { ...fbiGetCrimeEstimates, handler: async () => expanded },
-          input,
-        );
-        expect(expandedResult.isError).not.toBe(true);
-        expect(Buffer.byteLength(JSON.stringify(expandedResult), 'utf8')).toBeGreaterThan(24000);
-      }
+    });
+  }
+
+  it.each([false, true])(
+    'returns every captured month in one call, comparisons=%s',
+    async (include_comparisons) => {
+      expect(capturedKeys).toHaveLength(504);
+      serveCapture();
+      const result = await runToolContract(fbiGetCrimeEstimates, { ...input, include_comparisons });
+      expect(result.isError).not.toBe(true);
+      expect(http.calls).toHaveLength(1);
+      expect(result.structuredContent).not.toHaveProperty('next_from');
+      expect(result.structuredContent).not.toHaveProperty('oversize_notice');
+      const page = fbiGetCrimeEstimates.output.parse(result.structuredContent);
+      expect(page).toMatchObject({ from: '01-1985', to: '12-2026', total_months: 504 });
+      expect(page.comparisons?.map((comparison) => comparison.entity_name)).toEqual(
+        include_comparisons ? ['California', 'United States'] : undefined,
+      );
+      expectCapturedRows(page, capturedKeys);
+      expect(text(result)).toContain('**Months returned:** 504');
+      expect(text(result)).not.toMatch(/next_from|oversize/);
     },
   );
+
+  it('returns May 1987 through December 2026 from a mid-window start in one call', async () => {
+    serveCapture();
+    const result = await runToolContract(fbiGetCrimeEstimates, {
+      ...input,
+      from_year: 1987,
+      from_month: 5,
+      include_comparisons: true,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(http.calls).toHaveLength(1);
+    const url = new URL(http.calls[0]!.request.url);
+    expect(url.searchParams.get('from')).toBe('05-1987');
+    expect(url.searchParams.get('to')).toBe('12-2026');
+    expect(result.structuredContent).not.toHaveProperty('next_from');
+    const page = fbiGetCrimeEstimates.output.parse(result.structuredContent);
+    // (2026 - 1987) × 12 months + May through December.
+    expect(page).toMatchObject({ from: '05-1987', to: '12-2026', total_months: 476 });
+    expect(page.months[0]).toMatchObject({ year: 1987, month: 5 });
+    expect(page.months.at(-1)).toMatchObject({ year: 2026, month: 12 });
+    expectCapturedRows(
+      page,
+      capturedKeys.filter((key) => dateNumber(key) >= dateNumber('05-1987')),
+    );
+    expect(text(result)).toContain('**Range:** 05-1987 → 12-2026');
+    expect(text(result)).toContain('**Months returned:** 476');
+    expect(text(result)).not.toMatch(/next_from|oversize/);
+  });
 });

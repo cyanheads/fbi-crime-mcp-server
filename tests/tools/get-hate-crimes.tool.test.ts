@@ -12,6 +12,7 @@ import {
   runToolContract,
 } from '@cyanheads/mcp-ts-core/testing';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { zeroCountsNotice } from '@/mcp-server/tools/cde-totals.js';
 import { fbiGetHateCrimes } from '@/mcp-server/tools/definitions/get-hate-crimes.tool.js';
 import { initFbiApiService } from '@/services/fbi-api/fbi-api-service.js';
 
@@ -45,7 +46,6 @@ beforeEach(() => {
   http.install();
   initFbiApiService(parseConfig(), createInMemoryStorage(), {
     apiKey: 'TEST_KEY',
-    baseUrlUcr: origin,
     baseUrlCde: origin,
     requestTimeoutMs: 15000,
   });
@@ -65,10 +65,38 @@ function reply(path: string, payload: unknown): void {
   });
 }
 
+/** Answer one CDE path for one view (`totals` or `counts`). */
+function replyView(path: string, view: 'totals' | 'counts', payload: unknown): void {
+  http.route({
+    match: (request) => {
+      const url = new URL(request.url);
+      return (
+        url.origin === origin && url.pathname === path && url.searchParams.get('type') === view
+      );
+    },
+    respond: Response.json(payload),
+  });
+}
+
+function fixture(name: string): unknown {
+  return JSON.parse(readFileSync(new URL(`../fixtures/cde/${name}.json`, import.meta.url), 'utf8'));
+}
+
 function requestUrl(): URL {
   const call = http.calls[0];
   if (!call) throw new Error('no fetch was made');
   return new URL(call.request.url);
+}
+
+/** Every request made, as `path?type&from&to`, sorted. */
+function requests(): string[] {
+  return http.calls
+    .map((call) => {
+      const url = new URL(call.request.url);
+      const query = ['type', 'from', 'to'].map((key) => url.searchParams.get(key)).join('&');
+      return `${url.pathname}?${query}`;
+    })
+    .sort();
 }
 
 function expectReason(result: Result, reason: string, code: number): void {
@@ -341,6 +369,197 @@ describe('fbi_get_hate_crimes input contract', () => {
   });
 });
 
+describe('fbi_get_hate_crimes include_monthly', () => {
+  type MonthlyRow = Record<string, number | null>;
+  const monthlyOf = (result: Result) =>
+    (result.structuredContent as { monthly?: MonthlyRow[] }).monthly ?? [];
+
+  it('omitted sends only the totals request and returns no monthly', async () => {
+    reply('/hate-crime/national/all', capture('hate-national-2023'));
+    const result = await runToolContract(fbiGetHateCrimes, { scope: 'national', ...year2023 });
+    expect(result.isError).not.toBe(true);
+    expect(requests()).toEqual(['/hate-crime/national/all?totals&01-2023&12-2023']);
+    expect(result.structuredContent).not.toHaveProperty('monthly');
+    expect(text(result)).not.toContain('Monthly counts');
+  });
+
+  it("true adds one counts request for the bias code, with that code's monthly rows", async () => {
+    // Totals are a fixed-size category payload; the 2023 capture for the same code stands in.
+    replyView('/hate-crime/national/12', 'totals', capture('hate-national-bias12-2023'));
+    replyView('/hate-crime/national/12', 'counts', fixture('counts-hate-national-bias12-2022'));
+    const result = await runToolContract(fbiGetHateCrimes, {
+      scope: 'national',
+      bias: '12',
+      include_monthly: true,
+      from_year: 2022,
+      to_year: 2022,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(requests()).toEqual([
+      '/hate-crime/national/12?counts&01-2022&12-2022',
+      '/hate-crime/national/12?totals&01-2022&12-2022',
+    ]);
+    const monthly = monthlyOf(result);
+    expect(monthly).toHaveLength(12);
+    expect(monthly[2]).toEqual({
+      year: 2022,
+      month: 3,
+      incident_count: 312,
+      offense_count: 353,
+      incident_rate_per_100k: 0.1,
+      offense_rate_per_100k: 0.11,
+      population: 336746447,
+      participated_population: 320160011,
+      population_coverage_percent: 95.07,
+    });
+    expect(monthly.reduce((sum, row) => sum + (row.incident_count ?? 0), 0)).toBe(3650);
+    const body = text(result);
+    expect(body.split('\n').filter((line) => line.startsWith('### '))).toEqual([
+      ...TABLES.map(([, , heading]) => `### ${heading}`),
+      '### Monthly counts',
+    ]);
+    expect(tableRows(body, 'Monthly counts')).toHaveLength(12);
+    expect(body).toContain(
+      '| 2022 | 03 | 312 | 353 | 0.1 | 0.11 | 336,746,447 | 320,160,011 | 95.07% |',
+    );
+  });
+
+  it('reproduces 2020–2022 national incidents and mean monthly coverage per year', async () => {
+    replyView('/hate-crime/national/all', 'totals', fixture('hate-national-2020-2022'));
+    replyView('/hate-crime/national/all', 'counts', fixture('counts-hate-national-all-2020-2022'));
+    const result = await runToolContract(fbiGetHateCrimes, {
+      scope: 'national',
+      include_monthly: true,
+      from_year: 2020,
+      to_year: 2022,
+    });
+    expect(result.isError).not.toBe(true);
+    const monthly = monthlyOf(result);
+    expect(monthly).toHaveLength(36);
+    const perYear = [2020, 2021, 2022].map((year) => {
+      const rows = monthly.filter((row) => row.year === year);
+      const coverage = rows.reduce((sum, row) => sum + (row.population_coverage_percent ?? 0), 0);
+      return [
+        rows.reduce((sum, row) => sum + (row.incident_count ?? 0), 0),
+        Math.round((coverage / rows.length) * 10) / 10,
+      ];
+    });
+    expect(perYear).toEqual([
+      [9964, 95.9],
+      [11064, 77],
+      [11922, 94.8],
+    ]);
+    const categories = (result.structuredContent as unknown as HatePayload).incident_section
+      .bias_category;
+    expect(Object.values(categories ?? {}).reduce<number>((sum, n) => sum + (n ?? 0), 0)).toBe(
+      9964 + 11064 + 11922,
+    );
+  });
+
+  it('an unrecognized ORI returns an empty monthly and a notice that says so', async () => {
+    replyView('/hate-crime/agency/QQ0000000/all', 'totals', capture('hate-agency-unknown-2023'));
+    replyView(
+      '/hate-crime/agency/QQ0000000/all',
+      'counts',
+      fixture('counts-hate-agency-unknown-all-2023'),
+    );
+    const result = await runToolContract(fbiGetHateCrimes, {
+      scope: 'agency',
+      ori: 'QQ0000000',
+      include_monthly: true,
+      ...year2023,
+    });
+    expect(result.isError).not.toBe(true);
+    expect(result.structuredContent).toMatchObject({ monthly: [] });
+    const notice = (result.structuredContent as { notice?: string }).notice ?? '';
+    expect(notice).toMatch(/^Every count is zero because CDE does not recognize the ORI/);
+    expect(text(result)).toContain(notice);
+    expect(text(result)).toMatch(/### Monthly counts\nCDE sent no monthly series/);
+  });
+
+  it('a recognized agency with no reports keeps its 12 null months and is not called unknown', async () => {
+    // CDE sends the same all-zero totals for an agency with no reports as for an unknown ORI.
+    replyView('/hate-crime/agency/TX0950000/all', 'totals', capture('hate-agency-unknown-2023'));
+    replyView(
+      '/hate-crime/agency/TX0950000/all',
+      'counts',
+      fixture('counts-hate-agency-tx0950000-all-2023'),
+    );
+    const result = await runToolContract(fbiGetHateCrimes, {
+      scope: 'agency',
+      ori: 'TX0950000',
+      include_monthly: true,
+      ...year2023,
+    });
+    expect(result.isError).not.toBe(true);
+    const monthly = monthlyOf(result);
+    expect(monthly).toHaveLength(12);
+    expect(monthly.every((row) => row.incident_count === null && row.offense_count === null)).toBe(
+      true,
+    );
+    const notice = (result.structuredContent as { notice?: string }).notice ?? '';
+    expect(notice).toMatch(
+      /^Every count is zero, but these are not reported counts: CDE recognizes the ORI/,
+    );
+    expect(notice).toContain('the agency reported for no month of this window');
+    expect(notice).not.toContain('does not recognize');
+    expect(text(result)).toContain(notice);
+    expect(text(result)).toContain('| 2023 | 01 | — | — | — | — | 7,149 | — | — |');
+  });
+
+  it('fails a counts payload without its actuals key as malformed upstream data', async () => {
+    const counts = fixture('counts-hate-national-bias12-2022') as Record<string, unknown>;
+    delete counts.actuals;
+    replyView('/hate-crime/national/12', 'totals', capture('hate-national-bias12-2023'));
+    replyView('/hate-crime/national/12', 'counts', counts);
+    const result = await runToolContract(fbiGetHateCrimes, {
+      scope: 'national',
+      bias: '12',
+      include_monthly: true,
+      from_year: 2022,
+      to_year: 2022,
+    });
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.SerializationError },
+    });
+    expect(text(result)).toContain('Malformed FBI hate-crime counts response');
+  });
+
+  it('a totals 404 stops the counts leg mid-retry and surfaces the 404', async () => {
+    vi.useFakeTimers();
+    for (const [view, status] of [
+      ['totals', 404],
+      ['counts', 500],
+    ] as const) {
+      http.route({
+        match: (request) => {
+          const url = new URL(request.url);
+          return (
+            url.origin === origin &&
+            url.pathname === '/hate-crime/national/all' &&
+            url.searchParams.get('type') === view
+          );
+        },
+        respond: new Response('upstream text', { status }),
+      });
+    }
+    const pending = runToolContract(fbiGetHateCrimes, {
+      scope: 'national',
+      include_monthly: true,
+      ...year2023,
+    });
+    await vi.advanceTimersByTimeAsync(60_000);
+    const result = await pending;
+    expect(result.structuredContent).toMatchObject({
+      error: { code: JsonRpcErrorCode.NotFound, data: { status: 404 } },
+    });
+    expect(requests()).toEqual([
+      '/hate-crime/national/all?counts&01-2023&12-2023',
+      '/hate-crime/national/all?totals&01-2023&12-2023',
+    ]);
+  });
+});
+
 describe('fbi_get_hate_crimes zeros, nulls, and malformed payloads', () => {
   it('an all-zero agency payload succeeds with zeros intact and an identifier-first notice', async () => {
     reply('/hate-crime/agency/ZZ0000000/all', capture('hate-agency-unknown-2023'));
@@ -352,6 +571,8 @@ describe('fbi_get_hate_crimes zeros, nulls, and malformed payloads', () => {
     expect(result.isError).not.toBe(true);
     const structured = result.structuredContent as unknown as HatePayload & { notice: string };
     expect(structured.incident_section.bias_category).toMatchObject({ Religion: 0 });
+    // Without include_monthly the identifier is unchecked: the notice names both causes.
+    expect(structured.notice).toBe(zeroCountsNotice('agency', 'unchecked'));
     expect(structured.notice).toContain('fbi_search_agencies');
     expect(structured.notice).toContain('does not recognize the ORI');
     expect(text(result)).toContain(structured.notice);

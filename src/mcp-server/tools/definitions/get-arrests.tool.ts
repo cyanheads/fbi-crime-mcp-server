@@ -6,6 +6,12 @@
 
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
+import {
+  identifierCheck,
+  includeMonthlyField,
+  monthlySeries,
+  totalsWithCounts,
+} from '@/mcp-server/tools/cde-monthly.js';
 import { resolveScopedRange, scopedRangeFields } from '@/mcp-server/tools/cde-scoped-range.js';
 import {
   allCountsZero,
@@ -30,13 +36,19 @@ const FLOOR_YEAR = 1985;
  * count zero, indistinguishable from a real zero, so the enum is enforced locally. The spec's
  * `23` (Rape - Not Specified) is left out: it returns that same all-zero payload nationally for
  * 1985 through 2025.
+ *
+ * Each code counts exactly one CDE `Offense Breakdown` row, and its label names what it counts.
+ * A code that is one row of a multi-row `Offense Category` carries that row's name, so `140` and
+ * `150` read "(Unspecified)" rather than the category they are only part of. A code that is its
+ * category's only row carries the category name (`50` Aggravated Assault, `30` Robbery), since
+ * CDE's "Not Specified" suffix on a lone row would read as a subset.
  */
 const OFFENSE_LABELS = {
   '11': 'Murder and Nonnegligent Homicide',
   '12': 'Manslaughter by Negligence',
   '20': 'Rape - Not Specified (Legacy)',
   '30': 'Robbery',
-  '50': 'Assault - Not Specified',
+  '50': 'Aggravated Assault',
   '55': 'Simple Assault',
   '60': 'Burglary',
   '70': 'Larceny - Theft',
@@ -44,11 +56,11 @@ const OFFENSE_LABELS = {
   '101': 'Commercial Sex Acts',
   '102': 'Involuntary Servitude',
   '110': 'Arson',
-  '140': 'Prostitution and Commercialized Vice',
+  '140': 'Prostitution and Commercialized Vice (Unspecified)',
   '141': 'Prostitution and Commercialized Vice - Prostitution',
   '142': 'Prostitution and Commercialized Vice - Assisting or Promoting Prostitution',
   '143': 'Prostitution and Commercialized Vice - Purchasing Prostitution',
-  '150': 'Drug Abuse Violations',
+  '150': 'Drug Abuse Violations (Unspecified)',
   '151': 'Drug Sale/Manufacturing (Unspecified)',
   '152': 'Drug Sale/Manufacturing - Opium or Cocaine or Their Derivatives',
   '153': 'Drug Sale/Manufacturing - Marijuana',
@@ -77,6 +89,7 @@ const OFFENSE_LABELS = {
   '290': 'Disorderly Conduct',
   '300': 'Vagrancy',
   '310': 'All Other Offenses (Except Traffic)',
+  '320': 'Suspicion',
   '330': 'Curfew and Loitering Law Violations',
 } as const;
 
@@ -88,9 +101,22 @@ const OFFENSE_VALUES: ['all', ...OffenseCode[]] = [
 
 const { scope: scopeField, ...rangeFields } = scopedRangeFields(FLOOR_YEAR);
 
+const MONTHLY = monthlySeries({
+  counts: {
+    arrest_count: { series: 'Arrests', header: 'Arrests', description: 'Arrests in the month.' },
+  },
+  rates: {
+    rate_per_100k: {
+      series: 'Arrests',
+      header: 'Rate/100k',
+      description: 'Arrest rate for the month.',
+    },
+  },
+});
+
 export const fbiGetArrests = tool('fbi_get_arrests', {
   title: 'FBI Get Arrests',
-  description: `Arrest counts reported to FBI CDE for the nation, a state, or an agency, summed over a month window from January ${FLOOR_YEAR} through the current year. Returns arrests by offense name, offense category, and detailed offense breakdown, by arrestee sex and race, and by age group for male and female arrestees, with every category CDE reports, zeros included. Each grouping is tallied separately and their sums can differ (arrestee sex and race often total less than the offense groupings), so no grouping stands in for another's total. Narrow to one offense with offense. National scope omits identifiers; state requires only state_abbr; agency requires only ori (look it up with fbi_search_agencies). CDE returns zeros both when nothing was reported and when it does not recognize a state or ORI.`,
+  description: `Arrest counts reported to FBI CDE for the nation, a state, or an agency, summed over a month window from January ${FLOOR_YEAR} through the current year. Returns arrests by offense name, offense category, and detailed offense breakdown, by arrestee sex and race, and by age group for male and female arrestees, with every category CDE reports, zeros included. Each grouping is tallied separately and their sums can differ (arrestee sex and race often total less than the offense groupings), so no grouping stands in for another's total. Narrow to one offense with offense; a code counts one CDE offense breakdown row, which for drug, prostitution, gambling, homicide, human trafficking, and vagrancy codes is part of a larger category. National scope omits identifiers; state requires only state_abbr; agency requires only ori (look it up with fbi_search_agencies). CDE returns zeros both when nothing was reported and when it does not recognize a state or ORI. Set include_monthly for month-by-month arrest counts and rates with population and reporting coverage, which also tells those two cases apart.`,
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [
@@ -133,9 +159,10 @@ export const fbiGetArrests = tool('fbi_get_arrests', {
       .enum(OFFENSE_VALUES)
       .default('all')
       .describe(
-        `CDE arrest offense code to narrow the counts to, or all (default). Codes: ${codeListing(OFFENSE_LABELS)}.`,
+        `CDE arrest offense code to narrow the counts to, or all (default). A code counts only its own CDE Offense Breakdown row: for a category total use all and read offense_category, and for a category's sex, race, or age breakdown sum its codes. Multi-code categories: Homicide Offenses 11, 12; Human Trafficking 101, 102; Prostitution Offenses 140–143; Drug/Narcotic Offenses 150–160; Gambling Offenses 170–173; Vagrancy/Loitering 300, 330. Every other code is its own category. Codes: ${codeListing(OFFENSE_LABELS)}.`,
       ),
     ...rangeFields,
+    include_monthly: includeMonthlyField,
   }),
 
   output: z.object({
@@ -143,7 +170,9 @@ export const fbiGetArrests = tool('fbi_get_arrests', {
     offense: z.enum(OFFENSE_VALUES).describe('Arrest offense code applied, or all.'),
     offense_label: z
       .string()
-      .describe('CDE label for the applied offense code; "All offenses" for all.'),
+      .describe(
+        'What the applied code counts: its CDE Offense Breakdown row when the code is one row of a multi-code category, the category when it is the whole category; "All offenses" for all.',
+      ),
     offense_name: countMap('Arrests by offense name.'),
     offense_category: countMap('Arrests by offense category.'),
     offense_breakdown: countMap('Arrests by detailed offense breakdown.'),
@@ -159,6 +188,7 @@ export const fbiGetArrests = tool('fbi_get_arrests', {
       .string()
       .optional()
       .describe('Latest data month CDE reports (MM/YYYY); absent when CDE omits it.'),
+    monthly: MONTHLY.field,
   }),
 
   enrichment: {
@@ -176,9 +206,17 @@ export const fbiGetArrests = tool('fbi_get_arrests', {
       offense: input.offense,
       state_abbr: input.state_abbr,
       ori: input.ori,
+      include_monthly: input.include_monthly,
     });
     const range = resolveScopedRange(input, FLOOR_YEAR, ctx);
-    const data = await getFbiApiService().getArrestTotals(range, input.offense, ctx);
+    const service = getFbiApiService();
+    const [data, counts] = await totalsWithCounts(
+      ctx,
+      input.include_monthly,
+      (shared) => service.getArrestTotals(range, input.offense, shared),
+      (shared) => service.getCounts('arrest', range, input.offense, shared),
+    );
+    const monthly = counts && MONTHLY.rows(counts);
     const groups = {
       offense_name: data['Offense Name'],
       offense_category: data['Offense Category'],
@@ -189,7 +227,8 @@ export const fbiGetArrests = tool('fbi_get_arrests', {
       female_arrests_by_age: data['Female Arrests By Age'],
     };
 
-    if (allCountsZero(Object.values(groups))) ctx.enrich.notice(zeroCountsNotice(range.scope));
+    if (allCountsZero(Object.values(groups)))
+      ctx.enrich.notice(zeroCountsNotice(range.scope, identifierCheck(monthly)));
     const lastUpdated = data.cde_properties?.last_refresh_date?.UCR;
     const maxDataDate = data.cde_properties?.max_data_date?.UCR;
     return {
@@ -199,6 +238,7 @@ export const fbiGetArrests = tool('fbi_get_arrests', {
       ...groups,
       ...(lastUpdated && { data_last_updated: lastUpdated }),
       ...(maxDataDate && { max_data_date: maxDataDate }),
+      ...(monthly !== undefined && { monthly: monthly ?? [] }),
     };
   },
 
@@ -221,6 +261,7 @@ export const fbiGetArrests = tool('fbi_get_arrests', {
       ...countTable('Male arrests by age', result.male_arrests_by_age),
       ...countTable('Female arrests by age', result.female_arrests_by_age),
     );
+    if (result.monthly) lines.push(...MONTHLY.table(result.monthly));
     return [{ type: 'text', text: lines.join('\n') }];
   },
 });

@@ -83,19 +83,74 @@ describe('allCountsNull', () => {
 
 describe('zeroCountsNotice', () => {
   it('names the identifier check that fits each scope, and none nationally', () => {
-    const agency = zeroCountsNotice('agency');
+    const agency = zeroCountsNotice('agency', 'unchecked');
     expect(agency).toContain('does not recognize the ORI');
     expect(agency).toContain('fbi_search_agencies');
     expect(agency).not.toContain('state_abbr');
-    const state = zeroCountsNotice('state');
+    const state = zeroCountsNotice('state', 'unchecked');
     expect(state).toContain('does not recognize the state code');
     expect(state).toContain('state_abbr');
     expect(state).not.toContain('fbi_search_agencies');
-    const national = zeroCountsNotice('national');
+    const national = zeroCountsNotice('national', 'unchecked');
     expect(national).toMatch(/^Every count is zero/);
     expect(national).not.toContain('recognize');
     expect(national).not.toContain('state_abbr');
     expect(national).not.toContain('fbi_search_agencies');
+  });
+
+  it('keeps the unchecked wording that names both causes', () => {
+    expect(zeroCountsNotice('agency', 'unchecked')).toBe(
+      'Every count is zero. CDE returns zeros both when the agency reported nothing for this window and when it does not recognize the ORI; confirm the ORI with fbi_search_agencies.',
+    );
+    expect(zeroCountsNotice('state', 'unchecked')).toBe(
+      'Every count is zero. CDE returns zeros both when nothing was reported for this window and when it does not recognize the state code; confirm state_abbr is a US state or territory abbreviation.',
+    );
+  });
+
+  it('states the unknown identifier as the cause when the monthly view names no series for it', () => {
+    const agency = zeroCountsNotice('agency', 'unrecognized');
+    expect(agency).toMatch(/^Every count is zero because CDE does not recognize the ORI/);
+    expect(agency).toContain('fbi_search_agencies');
+    expect(agency).not.toContain('reported nothing');
+    const state = zeroCountsNotice('state', 'unrecognized');
+    expect(state).toMatch(/^Every count is zero because CDE does not recognize the state code/);
+    expect(state).toContain('state_abbr');
+    expect(state).not.toContain('fbi_search_agencies');
+  });
+
+  it('never suggests an unknown identifier once the monthly view recognizes it', () => {
+    for (const scope of ['agency', 'state'] as const) {
+      const notice = zeroCountsNotice(scope, 'recognized');
+      expect(notice).toMatch(/^Every count is zero, and CDE recognizes the/);
+      expect(notice).not.toContain('does not recognize');
+      expect(notice).not.toContain('fbi_search_agencies');
+      expect(notice).toContain('participated_population is null');
+    }
+  });
+
+  it('words the recognized state notice for the state, never the ORI', () => {
+    const notice = zeroCountsNotice('state', 'recognized');
+    expect(notice.startsWith('Every count is zero, and CDE recognizes the state:')).toBe(true);
+    expect(notice).not.toContain('ORI');
+  });
+
+  it('never calls the zeros reported when the identifier is recognized but no month was reported', () => {
+    for (const scope of ['agency', 'state'] as const) {
+      const notice = zeroCountsNotice(scope, 'unreported');
+      expect(notice).toMatch(
+        /^Every count is zero, but these are not reported counts: CDE recognizes the/,
+      );
+      expect(notice).toContain('participated_population is null in every monthly row');
+      expect(notice).not.toContain('does not recognize');
+      expect(notice).not.toContain('reported none');
+    }
+  });
+
+  it('says the same thing nationally whatever the check', () => {
+    const national = zeroCountsNotice('national', 'unchecked');
+    expect(zeroCountsNotice('national', 'recognized')).toBe(national);
+    expect(zeroCountsNotice('national', 'unrecognized')).toBe(national);
+    expect(zeroCountsNotice('national', 'unreported')).toBe(national);
   });
 });
 

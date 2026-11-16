@@ -11,7 +11,6 @@ import { FbiApiService } from '@/services/fbi-api/fbi-api-service.js';
 
 const serverConfig = {
   apiKey: 'TEST_KEY',
-  baseUrlUcr: 'https://api.usa.gov/crime/fbi/ucr',
   baseUrlCde: 'https://api.usa.gov/crime/fbi/cde',
   requestTimeoutMs: 15_000,
 };

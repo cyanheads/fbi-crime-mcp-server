@@ -8,7 +8,13 @@
 import { tool, z } from '@cyanheads/mcp-ts-core';
 import { JsonRpcErrorCode } from '@cyanheads/mcp-ts-core/errors';
 import { resolveScopedRange, scopedRangeFields } from '@/mcp-server/tools/cde-scoped-range.js';
-import { escapeMarkdown, scopeHeading, scopeLine } from '@/mcp-server/tools/cde-totals.js';
+import {
+  escapeMarkdown,
+  formatNumber,
+  formatPercent,
+  scopeHeading,
+  scopeLine,
+} from '@/mcp-server/tools/cde-totals.js';
 import { getFbiApiService } from '@/services/fbi-api/fbi-api-service.js';
 
 /** First year the /summarized/ endpoint serves, at every scope. */
@@ -145,34 +151,15 @@ const CrimeEstimatesOutputSchema = z.object({
     .describe(
       "Present only when include_comparisons is true: the comparison entities in CDE's order (an agency's state, then the United States; a state's United States). Empty when CDE sent none. CDE sends no counts for comparison entities.",
     ),
-  next_from: z
-    .object({
-      from_year: z.number().int().describe('Year of the first unreturned scoped month.'),
-      from_month: z
-        .number()
-        .int()
-        .min(1)
-        .max(12)
-        .describe('Month of the first unreturned scoped month (1–12).'),
-    })
-    .optional()
-    .describe(
-      'Continue with these start fields, keeping the scope, identifiers, offense, comparison flag and original end date.',
-    ),
-  oversize_notice: z
-    .string()
-    .optional()
-    .describe(
-      'Present when one indivisible month with its metadata exceeds the 24,000-byte serialized tool-payload budget and is returned intact.',
-    ),
 });
 
-/** Render the same domain payload for returned content and byte-budget sizing. */
+/**
+ * Render the domain payload as markdown. Numbers format in en-US, never the host locale, so
+ * content[] reads the same values as structuredContent on any server host.
+ */
 function formatCrimeEstimates(result: z.infer<typeof CrimeEstimatesOutputSchema>) {
-  const rateFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
-  const populationFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 20 });
+  const rateFormat = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
   const fmt = (v: number | null | undefined) => (v != null ? rateFormat.format(v) : '—');
-  const populationFmt = (v: number | null) => (v === null ? '—' : populationFormat.format(v));
   const lines: string[] = [
     `## FBI Crime Data — ${result.offense} (${scopeHeading(result)})`,
     scopeLine(result),
@@ -182,21 +169,15 @@ function formatCrimeEstimates(result: z.infer<typeof CrimeEstimatesOutputSchema>
   ];
   if (result.data_last_updated) lines.push(`**Data last updated:** ${result.data_last_updated}`);
   if (result.max_data_date) lines.push(`**Max data date:** ${result.max_data_date}`);
-  if (result.next_from)
-    lines.push(
-      `**next_from:** from_year=${result.next_from.from_year}, from_month=${result.next_from.from_month}. More months remain; repeat scope, identifiers, offense, include_comparisons and the original end date with this start.`,
-    );
-  if (result.oversize_notice) lines.push(result.oversize_notice);
   lines.push(
     '',
     'Reporting coverage may be incomplete or unavailable. — means unavailable; coverage is supplied by CDE, not calculated from populations.',
     '| Year | Month | Rate/100k | Clearance Rate | Actual Count | Clearances | Population | Participating population | Population coverage |',
     '|:-----|:-----:|----------:|---------------:|-------------:|-----------:|-----------:|-------------------------:|--------------------:|',
   );
-  const coverageFmt = (v: number | null) => (v !== null ? `${populationFmt(v)}%` : '—');
   for (const m of result.months) {
     lines.push(
-      `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${m.actual_count != null ? m.actual_count.toLocaleString() : '—'} | ${m.clearance_count != null ? m.clearance_count.toLocaleString() : '—'} | ${populationFmt(m.population)} | ${populationFmt(m.participated_population)} | ${coverageFmt(m.population_coverage_percent)} |`,
+      `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${m.actual_count != null ? m.actual_count.toLocaleString('en-US') : '—'} | ${m.clearance_count != null ? m.clearance_count.toLocaleString('en-US') : '—'} | ${formatNumber(m.population)} | ${formatNumber(m.participated_population)} | ${formatPercent(m.population_coverage_percent)} |`,
     );
   }
   if (result.comparisons) {
@@ -215,7 +196,7 @@ function formatCrimeEstimates(result: z.infer<typeof CrimeEstimatesOutputSchema>
       );
       for (const m of comparison.months) {
         lines.push(
-          `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${populationFmt(m.population)} | ${populationFmt(m.participated_population)} | ${coverageFmt(m.population_coverage_percent)} |`,
+          `| ${m.year} | ${String(m.month).padStart(2, '0')} | ${fmt(m.rate_per_100k)} | ${fmt(m.clearance_rate_per_100k)} | ${formatNumber(m.population)} | ${formatNumber(m.participated_population)} | ${formatPercent(m.population_coverage_percent)} |`,
         );
       }
     }
@@ -225,7 +206,7 @@ function formatCrimeEstimates(result: z.infer<typeof CrimeEstimatesOutputSchema>
 
 export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
   title: 'FBI Get Crime Estimates',
-  description: `Monthly offense rates (per 100,000 participating population), raw counts, population denominators and provider reporting coverage from FBI CDE, January ${FLOOR_YEAR} through the current year; current-year months past the latest data return null values. National scope omits identifiers; state requires only state_abbr; agency requires only ori. Identifiers are case-insensitive; start must be no later than end. Set include_comparisons on state or agency scope to also get the comparison rates CDE sends for the same months (an agency's state and the United States, or a state's United States). Results use the largest chronological prefix within 24,000 UTF-8 bytes of serialized {content, structuredContent}, excluding SDK protocol metadata and transport framing; next_from supplies the next start with the same scope, identifiers, offense, comparison flag and original end date. An indivisible oversize month and its metadata are returned intact with oversize_notice. Missing coverage stays null and participation may be incomplete. Offenses: violent-crime, property-crime, robbery, burglary, larceny, motor-vehicle-theft, arson, aggravated-assault, rape, homicide.`,
+  description: `Monthly offense rates (per 100,000 participating population), raw counts, population denominators and provider reporting coverage from FBI CDE, January ${FLOOR_YEAR} through the current year; current-year months past the latest data return null values. National scope omits identifiers; state requires only state_abbr; agency requires only ori. Identifiers are case-insensitive; start must be no later than end. Set include_comparisons on state or agency scope to also get the comparison rates CDE sends for the same months (an agency's state and the United States, or a state's United States). Missing coverage stays null and participation may be incomplete. Offenses: violent-crime, property-crime, robbery, burglary, larceny, motor-vehicle-theft, arson, aggravated-assault, rape, homicide.`,
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
 
   errors: [
@@ -401,7 +382,7 @@ export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
     const lastUpdated = data.cde_properties?.last_refresh_date?.UCR;
     const maxDataDate = data.cde_properties?.max_data_date?.UCR;
 
-    const result = {
+    return {
       scope: input.scope,
       offense: input.offense,
       entity_name: entity,
@@ -415,52 +396,6 @@ export const fbiGetCrimeEstimates = tool('fbi_get_crime_estimates', {
       ...(maxDataDate && { max_data_date: maxDataDate }),
       ...(comparisons && { comparisons }),
     };
-
-    /** The no-enrichment framework result contains exactly these two surfaces. */
-    const sizeBytes = (value: z.infer<typeof CrimeEstimatesOutputSchema>) => {
-      const structuredContent = CrimeEstimatesOutputSchema.parse(value);
-      return new TextEncoder().encode(
-        JSON.stringify({
-          structuredContent,
-          content: formatCrimeEstimates(structuredContent),
-        }),
-      ).byteLength;
-    };
-    if (sizeBytes(result) <= 24000) return result;
-
-    const page = (count: number): z.infer<typeof CrimeEstimatesOutputSchema> => {
-      const next = months[count];
-      return {
-        ...result,
-        months: months.slice(0, count),
-        total_months: count,
-        ...(comparisons && {
-          comparisons: comparisons.map((comparison) => ({
-            ...comparison,
-            months: comparison.months.slice(0, count),
-          })),
-        }),
-        ...(next && { next_from: { from_year: next.year, from_month: next.month } }),
-      };
-    };
-    let low = 1;
-    let high = months.length - 1;
-    let best = page(1);
-    if (sizeBytes(best) > 24000) {
-      best.oversize_notice =
-        'This indivisible month and its metadata exceed the 24,000-byte serialized tool-payload budget and are returned intact.';
-      return best;
-    }
-    while (low <= high) {
-      ctx.signal.throwIfAborted();
-      const count = Math.floor((low + high) / 2);
-      const candidate = page(count);
-      if (sizeBytes(candidate) <= 24000) {
-        best = candidate;
-        low = count + 1;
-      } else high = count - 1;
-    }
-    return best;
   },
 
   format: formatCrimeEstimates,

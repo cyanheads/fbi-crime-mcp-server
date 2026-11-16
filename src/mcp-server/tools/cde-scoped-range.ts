@@ -1,16 +1,21 @@
 /**
  * @fileoverview Shared input contract for CDE tools that take a national/state/agency scope and a
- * year/month range: the input fields (with each endpoint's year floor), identifier normalization,
- * and the pre-fetch checks for scope parameters, the current-year ceiling, and range order.
+ * year/month range or a whole-year range: the scope and identifier fields, the year/month range
+ * fields (with each endpoint's year floor), identifier normalization, and the pre-fetch checks for
+ * scope parameters, the current-year ceiling, and range order. Annual endpoints combine
+ * {@link scopeFields} with their own year fields and resolve through {@link resolveScopedYears}.
  * Each tool still declares the matching `errors[]` entries inline; the `ctx` parameter types
  * below fail to compile when one is missing.
  * @module mcp-server/tools/cde-scoped-range
  */
 
 import { type TypedFail, z } from '@cyanheads/mcp-ts-core';
-import type { CdeScopedWindow } from '@/services/fbi-api/types.js';
+import type { CdeScopedWindow, CdeYearWindow } from '@/services/fbi-api/types.js';
 
-/** Reasons {@link resolveScopedRange} can fail with; each tool declares all four. */
+/**
+ * Reasons {@link resolveScopedRange} and {@link resolveScopedYears} can fail with; each tool
+ * declares all four.
+ */
 export type ScopedRangeReason =
   | 'scope_param_missing'
   | 'scope_param_incompatible'
@@ -21,12 +26,8 @@ export type ScopedRangeReason =
 const blankAsUnset = <T extends z.ZodType>(schema: T) =>
   z.preprocess((value) => (value === '' ? undefined : value), schema);
 
-/**
- * Scope, identifier, and year/month range fields for a CDE scoped endpoint. `floorYear` is the
- * endpoint's first year with data and becomes the JSON Schema `minimum` on both year fields; the
- * ceiling (the current UTC year) is checked per call by {@link resolveScopedRange}.
- */
-export function scopedRangeFields(floorYear: number) {
+/** The scope field and the identifier fields state and agency scope each require one of. */
+export function scopeFields() {
   return {
     scope: z
       .enum(['national', 'state', 'agency'])
@@ -51,6 +52,17 @@ export function scopedRangeFields(floorYear: number) {
     ).describe(
       "Nine ASCII-letter/digit ORI code (e.g. CA0010400, DCMPD0000); case-insensitive. Find an agency's ORI with fbi_search_agencies. Only permitted and required for agency scope.",
     ),
+  };
+}
+
+/**
+ * Scope, identifier, and year/month range fields for a CDE scoped endpoint. `floorYear` is the
+ * endpoint's first year with data and becomes the JSON Schema `minimum` on both year fields; the
+ * ceiling (the current UTC year) is checked per call by {@link resolveScopedRange}.
+ */
+export function scopedRangeFields(floorYear: number) {
+  return {
+    ...scopeFields(),
     from_year: z
       .number()
       .int()
@@ -79,6 +91,12 @@ export function scopedRangeFields(floorYear: number) {
       .describe('End month (1–12). Defaults to December.'),
   };
 }
+
+/** Parsed scope and identifier fields, as {@link scopeFields} produces them. */
+type ScopeInput = z.output<z.ZodObject<ReturnType<typeof scopeFields>>>;
+
+/** Parsed scope fields with the first and last year of a range. */
+type ScopeYearsInput = ScopeInput & { from_year: number; to_year: number };
 
 /** Parsed scope and range fields, as {@link scopedRangeFields} produces them. */
 export type ScopedRangeInput = z.output<z.ZodObject<ReturnType<typeof scopedRangeFields>>>;
@@ -121,6 +139,41 @@ export function resolveScopedRange(
   floorYear: number,
   ctx: { fail: TypedFail<ScopedRangeReason> },
 ): ResolvedScopedRange {
+  const scope = resolveScopeAndCeiling(input, floorYear, ctx);
+  const from = toCdeMonth(input.from_year, input.from_month);
+  const to = toCdeMonth(input.to_year, input.to_month);
+  if (input.from_year * 12 + input.from_month > input.to_year * 12 + input.to_month) {
+    throw ctx.fail('invalid_date_range', `Start ${from} is later than end ${to}.`);
+  }
+  return { ...scope, from, to };
+}
+
+/**
+ * Validate a scoped whole-year range before any fetch and normalize its identifier to uppercase,
+ * for endpoints that serve annual series. Checks run in the order {@link resolveScopedRange}
+ * uses, with the range order compared on years alone.
+ */
+export function resolveScopedYears(
+  input: ScopeYearsInput,
+  floorYear: number,
+  ctx: { fail: TypedFail<ScopedRangeReason> },
+): CdeYearWindow {
+  const scope = resolveScopeAndCeiling(input, floorYear, ctx);
+  if (input.from_year > input.to_year) {
+    throw ctx.fail(
+      'invalid_date_range',
+      `from_year ${input.from_year} is later than to_year ${input.to_year}.`,
+    );
+  }
+  return { ...scope, fromYear: input.from_year, toYear: input.to_year };
+}
+
+/** The checks every scoped range runs first: the scope's identifiers, then the year ceiling. */
+function resolveScopeAndCeiling(
+  input: ScopeYearsInput,
+  floorYear: number,
+  ctx: { fail: TypedFail<ScopedRangeReason> },
+) {
   const scope = resolveScope(input, ctx);
   assertYearsNotFuture(
     [
@@ -130,17 +183,12 @@ export function resolveScopedRange(
     floorYear,
     ctx,
   );
-  const from = toCdeMonth(input.from_year, input.from_month);
-  const to = toCdeMonth(input.to_year, input.to_month);
-  if (input.from_year * 12 + input.from_month > input.to_year * 12 + input.to_month) {
-    throw ctx.fail('invalid_date_range', `Start ${from} is later than end ${to}.`);
-  }
-  return { ...scope, from, to };
+  return scope;
 }
 
 /** The scope's own identifier is required; any identifier the scope would ignore is rejected. */
 function resolveScope(
-  input: ScopedRangeInput,
+  input: ScopeInput,
   ctx: { fail: TypedFail<'scope_param_missing' | 'scope_param_incompatible'> },
 ) {
   const ignored = `state_abbr or ori is not applicable to scope="${input.scope}".`;
