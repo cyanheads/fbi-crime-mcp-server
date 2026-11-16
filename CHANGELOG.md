@@ -2,6 +2,10 @@
 
 All notable changes to this project. Each entry links to its full per-version file in [changelog/](changelog/).
 
+## [0.5.0](changelog/0.5.x/0.5.0.md) — 2026-11-16 · ⚠️ Breaking
+
+Adds fbi_get_police_employees for annual law enforcement staffing and include_monthly month-by-month counts on the arrest, hate-crime, and NIBRS tools. fbi_get_crime_estimates returns its whole window in one call, dropping next_from and oversize_notice.
+
 ## [0.4.1](changelog/0.4.x/0.4.1.md) — 2026-10-31
 
 Monthly crime estimates return bounded pages with date-based continuation.

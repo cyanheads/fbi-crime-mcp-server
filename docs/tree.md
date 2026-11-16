@@ -1,6 +1,6 @@
 # fbi-crime-mcp-server - Directory Structure
 
-Generated on: 2026-11-01 03:44:52
+Generated on: 2026-11-16 10:21:40
 
 ```text
 fbi-crime-mcp-server/
@@ -28,6 +28,7 @@ fbi-crime-mcp-server/
 │   ├── 0.2.x/
 │   ├── 0.3.x/
 │   ├── 0.4.x/
+│   ├── 0.5.x/
 │   └── template.md
 ├── docs/
 │   ├── design.md
@@ -139,6 +140,9 @@ fbi-crime-mcp-server/
 │   ├── prune-musl-packages.ts
 │   ├── release-github.ts
 │   └── tree.ts
+├── skills/
+│   └── fbi-crime-guide/
+│       └── SKILL.md
 ├── src/
 │   ├── config/
 │   │   └── server-config.ts
@@ -160,8 +164,10 @@ fbi-crime-mcp-server/
 │   │       │   ├── get-leoka.tool.ts
 │   │       │   ├── get-nibrs-breakdown.tool.ts
 │   │       │   ├── get-participation.tool.ts
+│   │       │   ├── get-police-employees.tool.ts
 │   │       │   ├── list-code-table.tool.ts
 │   │       │   └── search-agencies.tool.ts
+│   │       ├── cde-monthly.ts
 │   │       ├── cde-scoped-range.ts
 │   │       └── cde-totals.ts
 │   ├── services/
@@ -170,6 +176,8 @@ fbi-crime-mcp-server/
 │   │       └── types.ts
 │   └── index.ts
 ├── tests/
+│   ├── config/
+│   │   └── server-config.test.ts
 │   ├── fixtures/
 │   │   └── cde/
 │   │       ├── agency-ca0194200-property-1985-2026.json
@@ -181,21 +189,44 @@ fbi-crime-mcp-server/
 │   │       ├── arrest-agency-txspd0000-2023.json
 │   │       ├── arrest-agency-unknown-2023.json
 │   │       ├── arrest-national-2023.json
+│   │       ├── arrest-national-assault50-2023.json
+│   │       ├── arrest-national-drug150-2023.json
 │   │       ├── arrest-national-robbery30-2023.json
+│   │       ├── arrest-national-suspicion320-2023.json
 │   │       ├── arrest-state-tx-2023.json
+│   │       ├── counts-arrest-agency-tx0950000-all-2023.json
+│   │       ├── counts-arrest-agency-unknown-all-2023.json
+│   │       ├── counts-arrest-national-all-1985-2025.json
+│   │       ├── counts-arrest-national-robbery30-2023.json
+│   │       ├── counts-hate-agency-tx0950000-all-2023.json
+│   │       ├── counts-hate-agency-unknown-all-2023.json
+│   │       ├── counts-hate-national-all-2020-2022.json
+│   │       ├── counts-hate-national-bias12-2022.json
+│   │       ├── counts-nibrs-agency-txspd0000-13a-2020.json
+│   │       ├── counts-nibrs-agency-txspd0000-23c-2024.json
+│   │       ├── counts-nibrs-agency-unknown-13a-2023.json
 │   │       ├── hate-agency-txspd0000-2023.json
 │   │       ├── hate-agency-unknown-2023.json
+│   │       ├── hate-national-2020-2022.json
 │   │       ├── hate-national-2023.json
 │   │       ├── hate-national-bias12-2023.json
 │   │       ├── hate-state-tx-2023.json
 │   │       ├── monthly-2023-6.json
 │   │       ├── national-2026.json
 │   │       ├── national-jun2023.json
+│   │       ├── nibrs-agency-txspd0000-13a-2020.json
 │   │       ├── nibrs-agency-txspd0000-13a-2023.json
+│   │       ├── nibrs-agency-txspd0000-23c-2024.json
 │   │       ├── nibrs-agency-unknown-13a-2023.json
 │   │       ├── nibrs-national-120-2015-2025.json
 │   │       ├── nibrs-national-13a-2023.json
 │   │       ├── nibrs-state-tx-13a-2023.json
+│   │       ├── pe-agency-unknown-2023-2024.json
+│   │       ├── pe-agency-waspd0000-2017-2026.json
+│   │       ├── pe-national-2017-2026.json
+│   │       ├── pe-national-2026.json
+│   │       ├── pe-state-unknown-2023-2024.json
+│   │       ├── pe-state-wa-2017-2026.json
 │   │       ├── state.json
 │   │       ├── unknown-ori.json
 │   │       ├── ytd-2023.json
@@ -210,6 +241,7 @@ fbi-crime-mcp-server/
 │   │   ├── cde-contract.test.ts
 │   │   └── fbi-api-service.test.ts
 │   ├── tools/
+│   │   ├── cde-monthly.test.ts
 │   │   ├── cde-scoped-range.test.ts
 │   │   ├── cde-totals.test.ts
 │   │   ├── get-agency.tool.test.ts
@@ -221,6 +253,7 @@ fbi-crime-mcp-server/
 │   │   ├── get-leoka.tool.test.ts
 │   │   ├── get-nibrs-breakdown.tool.test.ts
 │   │   ├── get-participation.tool.test.ts
+│   │   ├── get-police-employees.tool.test.ts
 │   │   ├── list-code-table.tool.test.ts
 │   │   └── search-agencies.tool.test.ts
 │   └── discovery.test.ts
